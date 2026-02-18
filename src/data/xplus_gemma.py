@@ -44,7 +44,7 @@ class GemmaXPlusGenerator:
     device: str = "cuda"
     dtype: str = "bfloat16"  # "float16" also ok
     max_new_tokens: int = 48
-    temperature: float = 0.3
+    temperature: float = 0.7
     top_p: float = 0.9
 
     def __post_init__(self):

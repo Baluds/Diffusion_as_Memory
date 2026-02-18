@@ -1,39 +1,3 @@
-# import sys
-# from pathlib import Path
-# sys.path.append(str(Path(__file__).resolve().parents[1]))
-
-# from src.data.msr_datamodule import MSRGistDataModule
-
-# def main():
-#     dm = MSRGistDataModule(
-#         train_path="data/processed/train_part2_clean.json",
-#         tokenizer_name="bert-base-uncased",
-#         batch_size=4,
-#         max_length=128,
-#         num_workers=0,
-#         y_key="y",
-#         include_xt=False,
-#         make_xplus=True,
-#         xplus_max_replacements=2,
-#         deterministic_xplus=True,
-#     )
-#     dm.setup()
-#     batch = next(iter(dm.train_dataloader()))
-
-#     print("x_input_ids", batch["x_input_ids"].shape)
-#     print("xplus_input_ids", batch["xplus_input_ids"].shape)
-#     print("labels", batch["labels"].shape)
-
-#     for i in range(4):
-#         print("\n--- sample", i, "---")
-#         print("x     :", batch["raw_x"][i])
-#         print("x_plus:", batch["raw_x_plus"][i])
-#         print("y     :", batch["raw_y"][i])
-
-# if __name__ == "__main__":
-#     main()
-
-
 import os
 from src.data.msr_datamodule import MSRGistDataModule
 
@@ -54,26 +18,43 @@ def main():
 
         make_xplus=True,
         gemma_model_dir=model_dir,
-        xplus_cache_jsonl="data/processed/xplus_cache_part2.jsonl",
     )
 
     dm.prepare_data()
     dm.setup()
 
-    batch = next(iter(dm.train_dataloader()))
+    # inside main(), after dm.setup()
 
-    print("x_input_ids:", batch["x_input_ids"].shape)
-    print("xplus_input_ids:", batch["xplus_input_ids"].shape)
-    print("labels:", batch["labels"].shape)
+    dl = dm.train_dataloader()
 
-    for i in range(batch["x_input_ids"].shape[0]):
-        print("\n--- sample", i, "---")
-        print("id:", batch["id"][i])
-        print("x:", batch["raw_x"][i])
-        print("x+:", batch["raw_x_plus"][i])
+    num_batches = 0
+    num_examples = 0
 
-    # optionally persist new x+ generations from this run
-    dm.flush_xplus_cache_to_jsonl()
+    for batch_idx, batch in enumerate(dl):
+        num_batches += 1
+        # batch["x_input_ids"] is [B, L]
+        bsz = batch["x_input_ids"].shape[0]
+        num_examples += bsz
+
+        # Print a couple batches only (otherwise it will spam)
+        if batch_idx < 2:
+            print("\nBatch", batch_idx)
+            print("x_input_ids:", batch["x_input_ids"].shape)
+            print("xplus_input_ids:", batch["xplus_input_ids"].shape)
+            print("labels:", batch["labels"].shape)
+
+            for i in range(min(2, bsz)):
+                print("\n--- sample", i, "---")
+                print("id:", batch["id"][i])
+                print("x:", batch["raw_x"][i])
+                print("x+:", batch["raw_x_plus"][i])
+
+        # progress print every 50 batches
+        if (batch_idx + 1) % 50 == 0:
+            print(f"processed {batch_idx+1} batches ({num_examples} examples)")
+
+    print(f"\nEpoch done: {num_batches} batches, {num_examples} examples total")
+
 
 if __name__ == "__main__":
     main()
