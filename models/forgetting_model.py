@@ -32,9 +32,12 @@ class ForgettingModel(nn.Module):
         loss = F.cross_entropy(logits, labels)
         return loss
     
-
+    @property
+    def device(self):
+        return next(self.parameters()).device
+    
     def forward(self, batch):
-        device = next(self.parameters()).device
+        device = self.device
         lambda_u, lambda_x, lambda_y = 1.0, 1.0, 1.0
 
         input_ids = batch["x_input_ids"].to(device)
@@ -47,13 +50,17 @@ class ForgettingModel(nn.Module):
 
         H = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
         Hpos = self.encoder(input_ids=xpos_input_ids, attention_mask=xpos_attention_mask)
+        # print("shape of outputs after encoder", H.shape) # b, 64, 512
 
         outputs = self.slot_pooling(H, attention_mask)
+        print("shape of outputs after slot pooling", outputs.shape) # b, 8, 512
         pos_outputs = self.slot_pooling(Hpos, xpos_attention_mask)
 
         u = self.u_head(outputs)
         upos = self.u_head(pos_outputs)
         v0 = self.v_head(outputs)
+        print("shape of u", u.shape) # b, 128
+        print("shape of v0", v0.shape) # b, 8, 128
 
         B, L, _ = v0.shape
         slot_mask = torch.ones((B,L), device = device)
