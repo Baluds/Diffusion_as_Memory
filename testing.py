@@ -5,12 +5,12 @@ from transformers import T5Tokenizer
 import json
 
 from data_loader.data_loading import MSRDataset
-from encoder_prep.encoder import TextEncoder
-from slot_pooling_prep.slot_pooling import SlotPooling
-from uv_heads_prep.u_head import UHead
-from uv_heads_prep.v_head import VHead
-from decoder_prep.decoder_x import DecoderX
-from decoder_prep.decoder_y import DecoderY
+from models.encoder_prep.encoder import TextEncoder
+from models.slot_pooling_prep.slot_pooling import SlotPooling
+from models.uv_heads_prep.u_head import UHead
+from models.uv_heads_prep.v_head import VHead
+from models.decoder_prep.decoder_x import DecoderX
+from models.decoder_prep.decoder_y import DecoderY
 
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = torch.device("cpu")
