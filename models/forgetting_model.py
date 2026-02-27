@@ -53,14 +53,14 @@ class ForgettingModel(nn.Module):
         # print("shape of outputs after encoder", H.shape) # b, 64, 512
 
         outputs = self.slot_pooling(H, attention_mask)
-        print("shape of outputs after slot pooling", outputs.shape) # b, 8, 512
+        # print("shape of outputs after slot pooling", outputs.shape) # b, 8, 512
         pos_outputs = self.slot_pooling(Hpos, xpos_attention_mask)
 
         u = self.u_head(outputs)
         upos = self.u_head(pos_outputs)
         v0 = self.v_head(outputs)
-        print("shape of u", u.shape) # b, 128
-        print("shape of v0", v0.shape) # b, 8, 128
+        # print("shape of u", u.shape) # b, 128
+        # print("shape of v0", v0.shape) # b, 8, 128
 
         B, L, _ = v0.shape
         slot_mask = torch.ones((B,L), device = device)
