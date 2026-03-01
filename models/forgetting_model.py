@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from models.gpsi import GPsi
 
 class ForgettingModel(nn.Module):
     def __init__(
@@ -19,7 +20,7 @@ class ForgettingModel(nn.Module):
         self.v_head = v_head
         self.decoder_x = decoder_x
         self.decoder_y = decoder_y
-
+        self.gpsi = GPsi(u_dim=128, d_model=self.encoder.hidden_dim_size)
 
     def info_nce_loss(self, u, upos, temperature=0.1):
         """
@@ -59,11 +60,17 @@ class ForgettingModel(nn.Module):
         u = self.u_head(outputs)
         upos = self.u_head(pos_outputs)
         v0 = self.v_head(outputs)
+        print("v0 last dim:", v0.shape[-1])
         # print("shape of u", u.shape) # b, 128
         # print("shape of v0", v0.shape) # b, 8, 128
 
         B, L, _ = v0.shape
         slot_mask = torch.ones((B,L), device = device)
+
+        use_u_for_v0 = True  # can make this a config later, this is an optional flag for u+v0 instead of v0
+
+        if use_u_for_v0:
+            v0 = self.gpsi(v0, u)
 
         loss_x, logits_x = self.decoder_x(v0, slot_mask, labels_x)
         loss_y, logits_y = self.decoder_y(u, labels_y)
