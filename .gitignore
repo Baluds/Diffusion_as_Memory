@@ -4,3 +4,4 @@ __pycache__/
 /output_big/
 /denoiser/checkpoints/
 /checkpoints_p0/
+slurm-*.out
