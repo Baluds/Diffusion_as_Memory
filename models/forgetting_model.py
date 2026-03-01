@@ -76,3 +76,21 @@ class ForgettingModel(nn.Module):
         )
 
         return total_loss, logits_x, logits_y
+
+    @torch.no_grad()
+    def encode_latents(self, batch):
+        """
+        Extract latent representations (u, v0) without running decoders.
+        """
+        device = self.device
+
+        input_ids = batch["x_input_ids"].to(device)
+        attention_mask = batch["x_attention"].to(device)
+
+        H = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
+        outputs = self.slot_pooling(H, attention_mask)
+
+        u = self.u_head(outputs)    # [B, 128]
+        v0 = self.v_head(outputs)   # [B, 8, 512]
+
+        return u, v0
