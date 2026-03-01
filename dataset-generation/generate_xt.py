@@ -1,8 +1,9 @@
 import os, json
 from litellm import completion
 from system_prompt import SYSTEM_PROMPT as SYSTEM_PROMPT
+import itertools
 
-MODEL = "azure/gpt5"
+MODEL = "openai/gpt4o"
 api_key = "api-key"
 
 JSON_SCHEMA = {
@@ -39,7 +40,7 @@ def get_user_input(sentence):
 
 def generate_abstractions(input_json_data) -> dict:
     response = completion(
-        model="openai/gpt4o",
+        model=MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": input_json_data}
@@ -53,16 +54,25 @@ def generate_abstractions(input_json_data) -> dict:
     return json.loads(content)
 
 
-def get_input_data(input_jsonl_file):
+def get_input_data(input_jsonl_file, start_index, end_index):
     with open(input_jsonl_file, "r") as f:
-        jsonl_text = f.read()
-    return jsonl_text
+        sliced_lines = list(itertools.islice(f, start_index, end_index))
+    return "".join(sliced_lines)
 
 
 if __name__ == "__main__":
-    input_jsonl_file = "../../input_x_10.jsonl"
-    input_data = get_input_data(input_jsonl_file)
-    # print(input_data)
-    response = generate_abstractions(input_data)
-    with open("../../output_x_10_v5.json", "w") as f:
-        json.dump(response, f, indent=2)
+    input_jsonl_file = "../../input_x.jsonl"
+    start = 1140
+    batches = 10
+    last = 1150
+    for i in range(start, last, batches):
+        try:
+            print(f"Processing lines {i} to {i+batches}...")
+            input_data = get_input_data(input_jsonl_file, i, i+batches)
+            # print(input_data)
+            response = generate_abstractions(input_data)
+            with open(f"../../gpt4_final_outputs/output_x_{i}.json", "w") as f:
+                json.dump(response, f, indent=2)
+            print("_________________________________")
+        except Exception as e:
+            print(f"Error processing lines {i} to {i+batches}: {e}")
