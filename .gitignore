@@ -1,3 +1,6 @@
 .venv
 /myvenv
 __pycache__/
+/output_big/
+/denoiser/checkpoints/
+/checkpoints_p0/
