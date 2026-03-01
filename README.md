@@ -167,7 +167,7 @@ Train the full pipeline end-to-end:
 python testing_refactored.py
 ```
 
-### Stage C - Denoiser (after p0)
+### Denoiser (after p0)
 
 Freeze everything from p0. Train only the denoiser:
 - Input: frozen `v0` (detail latent) and `u` (semantic anchor)
