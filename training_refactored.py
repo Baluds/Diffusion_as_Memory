@@ -7,7 +7,7 @@ import os
 import numpy as np
 
 from tqdm import tqdm
-from data_loader.data_loading import MSRDataset
+from dataloader.dataloader_static import MSRDataset
 from models.encoder_prep.encoder import TextEncoder
 from models.slot_pooling_prep.slot_pooling import SlotPooling
 from models.uv_heads_prep.u_head import UHead
