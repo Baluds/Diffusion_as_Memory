@@ -44,8 +44,8 @@ class NoiseSchedule:
             raise ValueError(f"Unknown schedule_type: {schedule_type}")
         
         alphas = 1 - betas
-        alpha_bar = torch.cumprod(alphas, dim=0)
-        return alpha_bar
+        alpha_bar = torch.cumprod(alphas, dim=0) # alphas is calculated alpha at eact timestep but in diffusion alphas are multiplied right so t=1 is alpha1, t=2 is alpha1*alpha2 and so on so we take cumulative product to get alpha bar at each timestep which is product of all alphas from 1 to t
+        return alpha_bar # this is basically list of alpha bars for each timestep, so alpha_bar[t-1] gives us alpha bar at timestep t (1-indexed), like a lookup table which is pre calculated 
     
     def get_alpha_bar(self, t: int) -> float:
         """Get alpha_bar value at timestep t (1-indexed)."""
@@ -234,12 +234,6 @@ class TransformerBlock(nn.Module):
         Returns:
             output: [batch_size, L, d]
         
-        Block order per arch.md:
-            a. AdaLN(x, t_emb)
-            b. Self-Attention
-            c. Cross-Attention (no AdaLN before it)
-            d. AdaLN(x, t_emb)  [second application]
-            e. FFN
         """
         # a. AdaLN + b. Self-Attention
         x_normalized = self.adalan1(x, t_emb)

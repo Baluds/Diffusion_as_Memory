@@ -6,6 +6,14 @@ import json
 import os
 import numpy as np
 
+import sys
+
+# Ensure project root is on sys.path when running this script from a subdirectory
+# so top-level packages like `dataloader` and `models` can be imported.
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
 from tqdm import tqdm
 from dataloader.dataloader_augmentated import MSRAugmentedDataset
 from models.encoder_prep.encoder import TextEncoder
@@ -69,7 +77,7 @@ def log_sample_outputs(sample_outputs, tokenizer, epoch):
             "u": decoded_y[i]
         })
 
-    with open(f"./output_big/epoch_{epoch+1}_samples.json", "w") as f:
+    with open(f"/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/output_big1/epoch_{epoch+1}_samples.json", "w") as f:
         json.dump(results, f, indent=4)
 
 # Utility function to save model checkpoints
@@ -126,9 +134,9 @@ def main():
     print("device", device)
 
     tokenizer = T5Tokenizer.from_pretrained("t5-small")
-    train_dataset = MSRAugmentedDataset("./data/final/train.json", tokenizer)
+    train_dataset = MSRAugmentedDataset("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/final/train.json", tokenizer)
     train_loader = DataLoader(train_dataset, batch_size=10, shuffle = True)
-    val_dataset = MSRAugmentedDataset("./data/final/validate.json", tokenizer)
+    val_dataset = MSRAugmentedDataset("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/final/validate.json", tokenizer)
     val_loader = DataLoader(val_dataset, batch_size=10, shuffle = True)
 
     encoder = TextEncoder()
@@ -154,8 +162,8 @@ def main():
     # Validate every n epochs
     val_interval = 10
 
-    os.makedirs("./output_big", exist_ok=True)
-    os.makedirs("./checkpoints", exist_ok=True)
+    os.makedirs("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/output_big1", exist_ok=True)
+    os.makedirs("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/checkpoints1", exist_ok=True)
 
     best_val_loss = float("inf")
 
@@ -176,20 +184,20 @@ def main():
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 save_checkpoint(model, optimizer, epoch+1, train_loss, val_loss,
-                                "./checkpoints/best_model.pt")
+                                "/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/checkpoints1/best_model.pt")
                 tqdm.write(f"  -> New best model saved (val_loss={val_loss:.4f})")
         else:
             tqdm.write(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f}")
 
     # Save final checkpoint
     save_checkpoint(model, optimizer, epochs, train_loss, best_val_loss,
-                    "./checkpoints/final_model.pt")
+                    "/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/checkpoints1/final_model.pt")
     print(f"\nTraining complete. Best val loss: {best_val_loss:.4f}")
 
     print("\nExtracting latents from frozen model")
 
     # Load best checkpoint
-    checkpoint = torch.load("./checkpoints/best_model.pt", map_location=device)
+    checkpoint = torch.load("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/checkpoints1/best_model.pt", map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
 
@@ -197,17 +205,17 @@ def main():
     for param in model.parameters():
         param.requires_grad = False
 
-    os.makedirs("./data/latents", exist_ok=True)
+    os.makedirs("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/latents1", exist_ok=True)
 
     # Extract latents from training data
     train_loader_noshuffle = DataLoader(train_dataset, batch_size=10, shuffle=False)
     extract_and_save_latents(model, train_loader_noshuffle, tokenizer,
-                             "./data/latents/train_latents.pt")
+                             "/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/latents1/train_latents.pt")
 
     # Extract latents from validation data
     val_loader_noshuffle = DataLoader(val_dataset, batch_size=10, shuffle=False)
     extract_and_save_latents(model, val_loader_noshuffle, tokenizer,
-                             "./data/latents/val_latents.pt")
+                             "/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/latents1/val_latents.pt")
 
 if __name__ == "__main__":
     main()
