@@ -6,3 +6,4 @@ __pycache__/
 /denoiser/checkpoints/
 /checkpoints/
 slurm-*.out
+denoiser/guides/
