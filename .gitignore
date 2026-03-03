@@ -1,10 +1,8 @@
 .venv
 /myvenv
 __pycache__/
-/output_big/
-/output_big1/
-/checkpoints1/
+/output/
 /data/latents1/
 /denoiser/checkpoints/
-/checkpoints_p0/
+/checkpoints/
 slurm-*.out
