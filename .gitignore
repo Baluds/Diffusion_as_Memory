@@ -2,7 +2,7 @@
 /myvenv
 __pycache__/
 /output/
-/data/latents1/
+/data/latents/
 /denoiser/checkpoints/
 /checkpoints/
 slurm-*.out

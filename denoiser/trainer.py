@@ -237,7 +237,10 @@ class DenoiserTrainer:
         return avg_loss
     
     def save_checkpoint(self, epoch: int, is_best: bool = False):
-        """Save model checkpoint."""
+        """Save best model checkpoint only."""
+        if not is_best:
+            return
+
         checkpoint = {
             'epoch': epoch,
             'model_state_dict': self.denoiser.state_dict(),
@@ -253,15 +256,10 @@ class DenoiserTrainer:
                 'schedule': self.config.schedule,
             }
         }
-        
-        save_path = self.checkpoint_dir / f"checkpoint_epoch_{epoch}.pt"
-        torch.save(checkpoint, save_path)
-        print(f"Saved checkpoint: {save_path}")
-        
-        if is_best:
-            best_path = self.checkpoint_dir / "best_model.pt"
-            torch.save(checkpoint, best_path)
-            print(f"Saved best model: {best_path}")
+
+        best_path = self.checkpoint_dir / "best_model.pt"
+        torch.save(checkpoint, best_path)
+        print(f"Saved best model: {best_path} (epoch {epoch})")
     
     def load_checkpoint(self, checkpoint_path: str):
         """Load model from checkpoint."""
@@ -285,35 +283,49 @@ class DenoiserTrainer:
             val_loader: validation DataLoader
             num_epochs: number of training epochs
         """
+        # Open loss log CSV (append mode so resuming doesn't overwrite)
+        loss_log_path = self.checkpoint_dir / "losses.csv"
+        loss_log_file = open(loss_log_path, 'a')
+        # Write header only if file is empty
+        if loss_log_path.stat().st_size == 0:
+            loss_log_file.write("epoch,train_loss,val_loss,lr\n")
+
         for epoch in range(1, num_epochs + 1):
             print(f"\n--- Epoch {epoch}/{num_epochs} ---")
-            
+
             # Train
             train_loss = self.train_epoch(train_loader)
             self.training_history['train_loss'].append(train_loss)
             print(f"Training Loss: {train_loss:.6f}")
-            
+
             # Validate
             val_loss = self.validate(val_loader)
             self.training_history['val_loss'].append(val_loss)
             print(f"Validation Loss: {val_loss:.6f}")
-            
-            # Save checkpoint
+
+            # Save best model only
             is_best = val_loss < self.best_loss
             if is_best:
                 self.best_loss = val_loss
-            
             self.save_checkpoint(epoch, is_best=is_best)
-            
+
             # Update learning rate
             self.scheduler.step()
-            print(f"Learning Rate: {self.optimizer.param_groups[0]['lr']:.2e}")
-        
-        # Save training history
+            lr = self.optimizer.param_groups[0]['lr']
+            print(f"Learning Rate: {lr:.2e}")
+
+            # Log to CSV
+            loss_log_file.write(f"{epoch},{train_loss:.6f},{val_loss:.6f},{lr:.2e}\n")
+            loss_log_file.flush()
+
+        loss_log_file.close()
+        print(f"\nLoss log saved to {loss_log_path}")
+
+        # Save training history JSON
         history_path = self.checkpoint_dir / "training_history.json"
         with open(history_path, 'w') as f:
             json.dump(self.training_history, f, indent=2)
-        print(f"\nSaved training history to {history_path}")
+        print(f"Training history saved to {history_path}")
 
 
 def main():
