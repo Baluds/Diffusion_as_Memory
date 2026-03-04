@@ -16,6 +16,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+from utils.training_utils import ETATracker
 from tqdm import tqdm
 from dataloader.dataloader_augmentated import MSRAugmentedDataset
 from models.encoder_prep.encoder import TextEncoder
@@ -223,19 +224,27 @@ def main():
         wandb.watch(model, log="all", log_freq=len(train_loader))
 
     best_val_loss = float("inf")
+    eta_tracker = ETATracker(total_epochs=epochs)
 
     for epoch in range(epochs):
+        eta_tracker.start_epoch()
         train_loss = train_epoch(model, train_loader, optimizer)
+
+        # Compute epoch timing and ETA
+        epoch_elapsed, eta_seconds, eta_str = eta_tracker.end_epoch()
 
         # Log train loss to W&B every epoch
         if use_wandb:
-            wandb.log({"train/loss": train_loss}, step=epoch + 1)
+            wandb.log({
+                "train/loss": train_loss,
+                **eta_tracker.wandb_metrics(epoch_elapsed, eta_seconds),
+            }, step=epoch + 1)
 
         # Validate every val_interval epochs and on the last epoch
         if (epoch + 1) % val_interval == 0 or (epoch + 1) == epochs:
             val_loss, sample_outputs = validate_epoch(model, val_loader)
 
-            print(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}", flush=True)
+            print(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | ETA: {eta_str}", flush=True)
             print("-" * 30, flush=True)
 
             if use_wandb:
@@ -268,7 +277,7 @@ def main():
                     wandb.run.summary["best_val_loss"] = best_val_loss
                     wandb.run.summary["best_epoch"] = epoch + 1
         else:
-            print(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f}", flush=True)
+            print(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | ETA: {eta_str}", flush=True)
 
     # Save final checkpoint
     save_checkpoint(model, optimizer, epochs, train_loss, best_val_loss,

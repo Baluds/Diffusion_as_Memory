@@ -8,10 +8,17 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from typing import Tuple, Dict, Optional
 import os
+import sys
 import json
 from pathlib import Path
 from tqdm import tqdm
 
+# Allow importing shared utilities from the project root
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+from utils.training_utils import ETATracker
 from config import DenoiserConfig
 from denoiser import Denoiser, NoiseSchedule, forward_diffusion
 
@@ -331,7 +338,10 @@ class DenoiserTrainer:
         if loss_log_path.stat().st_size == 0:
             loss_log_file.write("epoch,train_loss,val_loss,lr\n")
 
+        eta_tracker = ETATracker(total_epochs=num_epochs)
+
         for epoch in range(1, num_epochs + 1):
+            eta_tracker.start_epoch()
             print(f"\n--- Epoch {epoch}/{num_epochs} ---")
 
             # Train
@@ -355,6 +365,10 @@ class DenoiserTrainer:
             lr = self.optimizer.param_groups[0]['lr']
             print(f"Learning Rate: {lr:.2e}")
 
+            # Compute epoch timing and ETA
+            epoch_elapsed, eta_seconds, eta_str = eta_tracker.end_epoch()
+            print(f"Epoch time: {epoch_elapsed:.1f}s | ETA: {eta_str}", flush=True)
+
             # Log to CSV
             loss_log_file.write(f"{epoch},{train_loss:.6f},{val_loss:.6f},{lr:.2e}\n")
             loss_log_file.flush()
@@ -362,7 +376,12 @@ class DenoiserTrainer:
             # Log to wandb if enabled
             if self.use_wandb and self.wandb is not None:
                 try:
-                    self.wandb.log({'train_loss': train_loss, 'val_loss': val_loss, 'lr': lr}, step=epoch)
+                    self.wandb.log({
+                        'train_loss': train_loss,
+                        'val_loss': val_loss,
+                        'lr': lr,
+                        **eta_tracker.wandb_metrics(epoch_elapsed, eta_seconds),
+                    }, step=epoch)
                 except Exception:
                     print("wandb: error during wandb.log")
 
