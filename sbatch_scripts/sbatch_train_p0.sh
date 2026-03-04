@@ -12,4 +12,4 @@ conda activate /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/.conda/envs/di
 python3 /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/scripts/training/training_dl_augmented.py \
  --latents-dir ./data/latents/ \
  --wandb-project diffusion-as-memory \
- --wandb-run-name p0-training-run  #make sure to change this for each run to avoid overwriting previous runs in W&B
+ --wandb-run-name p0-training-run_$(date +%Y%m%d_%H%M%S)

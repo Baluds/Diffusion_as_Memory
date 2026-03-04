@@ -24,6 +24,12 @@ def main():
                         help="Path to val_latents.pt file")
     parser.add_argument("--checkpoint-dir", type=str, default="./checkpoints",
                         help="Directory to save checkpoints")
+    parser.add_argument("--wandb-off", action="store_true",
+                        help="Disable Weights & Biases logging")
+    parser.add_argument("--wandb-project", type=str, default="diffusion-as-memory",
+                        help="W&B project name")
+    parser.add_argument("--wandb-run-name", type=str, required=True,
+                        help="W&B run name")
     
     args = parser.parse_args()
     
@@ -75,6 +81,15 @@ def main():
     checkpoint_dir.mkdir(exist_ok=True, parents=True)
     
     trainer = DenoiserTrainer(config, checkpoint_dir=str(checkpoint_dir))
+    # Re-create trainer with wandb if not disabled
+    if not args.wandb_off:
+        trainer = DenoiserTrainer(
+            config,
+            checkpoint_dir=str(checkpoint_dir),
+            use_wandb=True,
+            wandb_project=args.wandb_project,
+            wandb_run_name=args.wandb_run_name,
+        )
     
     print(f"\n{'-'*60}")
     print("STARTING TRAINING...")

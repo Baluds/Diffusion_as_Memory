@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from typing import Tuple, Dict, Optional
+import os
 import json
 from pathlib import Path
 from tqdm import tqdm
@@ -108,7 +109,10 @@ class DenoiserTrainer:
     def __init__(
         self,
         config: DenoiserConfig,
-        checkpoint_dir: Optional[str] = None
+        checkpoint_dir: Optional[str] = None,
+        use_wandb: bool = False,
+        wandb_project: str = "diffusion-as-memory",
+        wandb_run_name: Optional[str] = None,
     ):
         """
         Args:
@@ -148,6 +152,33 @@ class DenoiserTrainer:
             'train_loss': [],
             'val_loss': []
         }
+
+        # Optional Weights & Biases integration
+        self.use_wandb = bool(use_wandb)
+        self.wandb = None
+        if self.use_wandb:
+            try:
+                import wandb
+                # Build a small config dict from the config object
+                try:
+                    cfg_dict = {
+                        'L': self.config.L,
+                        'd': self.config.d,
+                        'T': self.config.T,
+                        'num_epochs': self.config.num_epochs,
+                        'batch_size': self.config.batch_size,
+                        'learning_rate': self.config.learning_rate,
+                    }
+                except Exception:
+                    cfg_dict = {}
+
+                wandb.init(project=wandb_project, name=wandb_run_name, config=cfg_dict)
+                wandb.watch(self.denoiser, log='all')
+                self.wandb = wandb
+                print("wandb: initialized")
+            except Exception as e:
+                print(f"wandb: unavailable or failed to init ({e}); continuing without wandb")
+                self.use_wandb = False
     
     def train_epoch(self, train_loader: DataLoader) -> float:
         """
@@ -260,6 +291,16 @@ class DenoiserTrainer:
         best_path = self.checkpoint_dir / "best_model.pt"
         torch.save(checkpoint, best_path)
         print(f"Saved best model: {best_path} (epoch {epoch})")
+        # Upload/save to wandb run if available
+        if self.use_wandb and self.wandb is not None:
+            try:
+                # Ensure file is saved by wandb
+                self.wandb.save(str(best_path))
+                if hasattr(self.wandb, 'run') and self.wandb.run is not None:
+                    self.wandb.run.summary['best_val_loss'] = self.best_loss
+                    self.wandb.run.summary['best_epoch'] = epoch
+            except Exception:
+                print("wandb: unable to save checkpoint to run")
     
     def load_checkpoint(self, checkpoint_path: str):
         """Load model from checkpoint."""
@@ -318,6 +359,13 @@ class DenoiserTrainer:
             loss_log_file.write(f"{epoch},{train_loss:.6f},{val_loss:.6f},{lr:.2e}\n")
             loss_log_file.flush()
 
+            # Log to wandb if enabled
+            if self.use_wandb and self.wandb is not None:
+                try:
+                    self.wandb.log({'train_loss': train_loss, 'val_loss': val_loss, 'lr': lr}, step=epoch)
+                except Exception:
+                    print("wandb: error during wandb.log")
+
         loss_log_file.close()
         print(f"\nLoss log saved to {loss_log_path}")
 
@@ -326,6 +374,13 @@ class DenoiserTrainer:
         with open(history_path, 'w') as f:
             json.dump(self.training_history, f, indent=2)
         print(f"Training history saved to {history_path}")
+
+        # Finish wandb run if active
+        if self.use_wandb and self.wandb is not None:
+            try:
+                self.wandb.finish()
+            except Exception:
+                pass
 
 
 def main():

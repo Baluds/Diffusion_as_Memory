@@ -199,3 +199,16 @@ python trainer.py
 ## Requirements
 
 `requirements.txt` for full list.
+
+Before running experiments with Weights & Biases enabled, authenticate with W&B by running:
+
+```bash
+wandb login
+```
+
+Alternatively, set your API key with the `WANDB_API_KEY` environment variable:
+
+```bash
+export WANDB_API_KEY=your_api_key_here
+```
+

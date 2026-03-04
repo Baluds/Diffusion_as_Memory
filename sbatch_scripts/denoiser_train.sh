@@ -26,6 +26,8 @@ echo ""
 
 python train_on_latents.py \
     --train-latents ../data/latents/train_latents.pt \
-    --val-latents ../data/latents/val_latents.pt
+    --val-latents ../data/latents/val_latents.pt \
+    --wandb-project diffusion-as-memory \
+    --wandb-run-name p1-training-run_$(date +%Y%m%d_%H%M%S)
 
 echo "Training complete!"
