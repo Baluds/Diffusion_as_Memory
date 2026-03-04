@@ -1,7 +1,6 @@
 .venv
 /myvenv
 __pycache__/
-/output/
 /data/latents/
 /denoiser/checkpoints/
 /checkpoints/
