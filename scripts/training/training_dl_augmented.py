@@ -6,6 +6,7 @@ import json
 import os
 import numpy as np
 import argparse
+import wandb
 
 import sys
 
@@ -149,6 +150,12 @@ def main():
                         help="Directory to save checkpoints")
     parser.add_argument("--latents-dir", type=str, required=True,
                         help="Directory to save extracted latents (.pt files)")
+    parser.add_argument("--wandb-project", type=str, default="diffusion-as-memory",
+                        help="W&B project name")
+    parser.add_argument("--wandb-run-name", type=str, required=True,
+                        help="W&B run name (defaults to auto-generated)")
+    parser.add_argument("--wandb-off", action="store_true",
+                        help="Disable W&B logging entirely")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -197,10 +204,32 @@ def main():
     os.makedirs(checkpoint_dir, exist_ok=True)
     os.makedirs(latents_dir, exist_ok=True)
 
+    use_wandb = not args.wandb_off
+    if use_wandb:
+        wandb.init(
+            project=args.wandb_project,
+            name=args.wandb_run_name,
+            config={
+                "epochs": epochs,
+                "batch_size": 10,
+                "learning_rate": 1e-4,
+                "val_interval": val_interval,
+                "output_dir": output_dir,
+                "checkpoint_dir": checkpoint_dir,
+                "latents_dir": latents_dir,
+            },
+        )
+        # Log gradients and parameter histograms every epoch
+        wandb.watch(model, log="all", log_freq=len(train_loader))
+
     best_val_loss = float("inf")
 
     for epoch in range(epochs):
         train_loss = train_epoch(model, train_loader, optimizer)
+
+        # Log train loss to W&B every epoch
+        if use_wandb:
+            wandb.log({"train/loss": train_loss}, step=epoch + 1)
 
         # Validate every val_interval epochs and on the last epoch
         if (epoch + 1) % val_interval == 0 or (epoch + 1) == epochs:
@@ -209,8 +238,25 @@ def main():
             print(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}", flush=True)
             print("-" * 30, flush=True)
 
+            if use_wandb:
+                wandb.log({"val/loss": val_loss}, step=epoch + 1)
+
             if sample_outputs:
                 log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir)
+
+                # Log a sample table to W&B first batch only
+                if use_wandb:
+                    batch0, logits_x0, logits_y0 = sample_outputs[0]
+                    pred_ids_x = torch.argmax(logits_x0, dim=-1)
+                    pred_ids_y = torch.argmax(logits_y0, dim=-1)
+                    dec_x = tokenizer.batch_decode(pred_ids_x, skip_special_tokens=True)
+                    dec_y = tokenizer.batch_decode(pred_ids_y, skip_special_tokens=True)
+                    orig_x = tokenizer.batch_decode(batch0["x_input_ids"], skip_special_tokens=True)
+                    orig_y = tokenizer.batch_decode(batch0["y_input_ids"], skip_special_tokens=True)
+                    table = wandb.Table(columns=["original_x", "v0_pred", "original_y", "u_pred"])
+                    for ox, px, oy, py in zip(orig_x, dec_x, orig_y, dec_y):
+                        table.add_data(ox, px, oy, py)
+                    wandb.log({"val/samples": table}, step=epoch + 1)
 
             # Save best model
             if val_loss < best_val_loss:
@@ -218,6 +264,9 @@ def main():
                 save_checkpoint(model, optimizer, epoch+1, train_loss, val_loss,
                                 os.path.join(checkpoint_dir, "best_model.pt"))
                 print(f"  -> New best model saved (val_loss={val_loss:.4f})", flush=True)
+                if use_wandb:
+                    wandb.run.summary["best_val_loss"] = best_val_loss
+                    wandb.run.summary["best_epoch"] = epoch + 1
         else:
             print(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f}", flush=True)
 
@@ -225,6 +274,8 @@ def main():
     save_checkpoint(model, optimizer, epochs, train_loss, best_val_loss,
                     os.path.join(checkpoint_dir, f"final_model.pt"))
     print(f"\nTraining complete. Best val loss: {best_val_loss:.4f}")
+    if use_wandb:
+        wandb.finish()
 
     print("\nExtracting latents from frozen model")
 
