@@ -5,6 +5,7 @@ from transformers import T5Tokenizer
 import json
 import os
 import numpy as np
+import argparse
 
 import sys
 
@@ -28,14 +29,12 @@ from models.forgetting_model import ForgettingModel
 def train_epoch(model, dataloader, optimizer):
     model.train()
     total_loss = 0
-    pbar = tqdm(dataloader, desc="Training", leave=False)
-    for batch in pbar:
+    for batch in dataloader:
         optimizer.zero_grad()
         loss, _, _ = model(batch)
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
-        pbar.set_postfix(loss=f"{loss.item():.4f}")
     return total_loss / len(dataloader)
 
 
@@ -43,41 +42,53 @@ def train_epoch(model, dataloader, optimizer):
 def validate_epoch(model, dataloader):
     model.eval()
     total_loss = 0
-    sample_outputs = None
-    
-    #Added tqdm progress bar for validation loop
-    pbar = tqdm(dataloader, desc="Validating", leave=False)
-    for i, batch in enumerate(pbar):
+    sample_outputs = []
+
+    # Iterate over validation batches and collect all sample outputs
+    for i, batch in enumerate(dataloader):
         loss, logits_x, logits_y = model(batch)
         total_loss += loss.item()
-        pbar.set_postfix(loss=f"{loss.item():.4f}")
-        if i == 0:
-            sample_outputs = (batch, logits_x, logits_y)
-            
-    return total_loss / len(dataloader), sample_outputs
+        # store tuple for this batch
+        sample_outputs.append((batch, logits_x, logits_y))
+
+    avg_loss = total_loss / len(dataloader)
+    return avg_loss, sample_outputs
 
 
-def log_sample_outputs(sample_outputs, tokenizer, epoch):
-    batch, logits_x, logits_y = sample_outputs
+def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
+    """Decode and save predictions for all collected validation batches.
 
-    pred_ids_x = torch.argmax(logits_x, dim=-1)
-    pred_ids_y = torch.argmax(logits_y, dim=-1)
-    decoded_x = tokenizer.batch_decode(pred_ids_x, skip_special_tokens=True)
-    decoded_y = tokenizer.batch_decode(pred_ids_y, skip_special_tokens=True)
-
-    original_x = tokenizer.batch_decode(batch["x_input_ids"], skip_special_tokens=True)
-    original_y = tokenizer.batch_decode(batch["y_input_ids"], skip_special_tokens=True)
+    Args:
+        sample_outputs: list of (batch, logits_x, logits_y) tuples for each val batch
+        tokenizer: tokenizer for decoding ids
+        epoch: current epoch index (0-based)
+        output_dir: directory to write JSON file
+    """
+    os.makedirs(output_dir, exist_ok=True)
 
     results = []
-    for i in range(len(decoded_x)):
-        results.append({
-            "original_x": original_x[i],
-            "v0": decoded_x[i],
-            "original_y": original_y[i],
-            "u": decoded_y[i]
-        })
+    for batch, logits_x, logits_y in sample_outputs:
+        pred_ids_x = torch.argmax(logits_x, dim=-1)
+        pred_ids_y = torch.argmax(logits_y, dim=-1)
 
-    with open(f"/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/output_big1/epoch_{epoch+1}_samples.json", "w") as f:
+        # Decode predictions and originals (tokenizer.batch_decode handles lists/tensors)
+        decoded_x = tokenizer.batch_decode(pred_ids_x, skip_special_tokens=True)
+        decoded_y = tokenizer.batch_decode(pred_ids_y, skip_special_tokens=True)
+
+        original_x = tokenizer.batch_decode(batch["x_input_ids"], skip_special_tokens=True)
+        original_y = tokenizer.batch_decode(batch["y_input_ids"], skip_special_tokens=True)
+
+        for i in range(len(decoded_x)):
+            results.append({
+                "original_x": original_x[i],
+                "v0": decoded_x[i],
+                "original_y": original_y[i],
+                "u": decoded_y[i]
+            })
+
+    # Write a single file containing all decoded samples from the validation set
+    out_path = os.path.join(output_dir, f"epoch_{epoch+1}_samples.json")
+    with open(out_path, "w") as f:
         json.dump(results, f, indent=4)
 
 # Utility function to save model checkpoints
@@ -130,8 +141,24 @@ def extract_and_save_latents(model, dataloader, tokenizer, save_path):
 
 
 def main():
+    print(os.path.abspath(__file__))
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=str, default="./output/p0/temp",
+                        help="Directory to write sample output JSONs")
+    parser.add_argument("--checkpoint-dir", type=str, default="./checkpoints/p0/temp",
+                        help="Directory to save checkpoints")
+    parser.add_argument("--latents-dir", type=str, required=True,
+                        help="Directory to save extracted latents (.pt files)")
+    args = parser.parse_args()
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("device", device)
+
+    # Hardcodded datasets without x+ generation
+    # train_dataset = MSRDataset("./data/final/train.json")
+    # train_loader = DataLoader(train_dataset, batch_size=10, shuffle = True)
+    # val_dataset = MSRDataset("./data/final/validate.json")
+    # val_loader = DataLoader(val_dataset, batch_size=10, shuffle = True)
 
     tokenizer = T5Tokenizer.from_pretrained("t5-small")
     train_dataset = MSRAugmentedDataset("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/final/train.json", tokenizer)
@@ -162,42 +189,47 @@ def main():
     # Validate every n epochs
     val_interval = 10
 
-    os.makedirs("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/output_big1", exist_ok=True)
-    os.makedirs("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/checkpoints1", exist_ok=True)
+    output_dir = args.output_dir
+    checkpoint_dir = args.checkpoint_dir
+    latents_dir = args.latents_dir
+
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    os.makedirs(latents_dir, exist_ok=True)
 
     best_val_loss = float("inf")
 
-    for epoch in tqdm(range(epochs), desc="Epochs"):
+    for epoch in range(epochs):
         train_loss = train_epoch(model, train_loader, optimizer)
 
         # Validate every val_interval epochs and on the last epoch
         if (epoch + 1) % val_interval == 0 or (epoch + 1) == epochs:
             val_loss, sample_outputs = validate_epoch(model, val_loader)
 
-            tqdm.write(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
-            tqdm.write("-" * 30)
+            print(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}", flush=True)
+            print("-" * 30, flush=True)
 
             if sample_outputs:
-                log_sample_outputs(sample_outputs, tokenizer, epoch)
+                log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir)
 
             # Save best model
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 save_checkpoint(model, optimizer, epoch+1, train_loss, val_loss,
-                                "/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/checkpoints1/best_model.pt")
-                tqdm.write(f"  -> New best model saved (val_loss={val_loss:.4f})")
+                                os.path.join(checkpoint_dir, "best_model.pt"))
+                print(f"  -> New best model saved (val_loss={val_loss:.4f})", flush=True)
         else:
-            tqdm.write(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f}")
+            print(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f}", flush=True)
 
     # Save final checkpoint
     save_checkpoint(model, optimizer, epochs, train_loss, best_val_loss,
-                    "/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/checkpoints1/final_model.pt")
+                    os.path.join(checkpoint_dir, f"final_model.pt"))
     print(f"\nTraining complete. Best val loss: {best_val_loss:.4f}")
 
     print("\nExtracting latents from frozen model")
 
     # Load best checkpoint
-    checkpoint = torch.load("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/checkpoints1/best_model.pt", map_location=device)
+    checkpoint = torch.load(os.path.join(checkpoint_dir, "best_model.pt"), map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
 
@@ -205,17 +237,23 @@ def main():
     for param in model.parameters():
         param.requires_grad = False
 
-    os.makedirs("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/latents1", exist_ok=True)
-
     # Extract latents from training data
     train_loader_noshuffle = DataLoader(train_dataset, batch_size=10, shuffle=False)
-    extract_and_save_latents(model, train_loader_noshuffle, tokenizer,
-                             "/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/latents1/train_latents.pt")
+    extract_and_save_latents(
+        model,
+        train_loader_noshuffle,
+        tokenizer,
+        os.path.join(latents_dir, "train_latents.pt")
+    )
 
     # Extract latents from validation data
     val_loader_noshuffle = DataLoader(val_dataset, batch_size=10, shuffle=False)
-    extract_and_save_latents(model, val_loader_noshuffle, tokenizer,
-                             "/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/latents1/val_latents.pt")
+    extract_and_save_latents(
+        model,
+        val_loader_noshuffle,
+        tokenizer,
+        os.path.join(latents_dir, "val_latents.pt")
+    )
 
 if __name__ == "__main__":
     main()

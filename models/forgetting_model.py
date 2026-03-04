@@ -60,9 +60,6 @@ class ForgettingModel(nn.Module):
         u = self.u_head(outputs)
         upos = self.u_head(pos_outputs)
         v0 = self.v_head(outputs)
-        print("v0 last dim:", v0.shape[-1])
-        # print("shape of u", u.shape) # b, 128
-        # print("shape of v0", v0.shape) # b, 8, 128
 
         B, L, _ = v0.shape
         slot_mask = torch.ones((B,L), device = device)
