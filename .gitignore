@@ -5,5 +5,5 @@ __pycache__/
 /denoiser_module/checkpoints/
 /checkpoints/
 slurm-*.out
-denoiser/guides/
+denoiser_module/guides/
 wandb/
