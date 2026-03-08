@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple, Optional, List
-from config import DenoiserConfig
+from denoiser_module.config import DenoiserConfig
 
 
 class NoiseSchedule:
@@ -118,8 +118,11 @@ class AdaLN(nn.Module):
         gamma, beta = affine_params.chunk(2, dim=-1)  # each [batch_size, d] so d is split into two parts
         
         # Reshape for broadcasting: [batch_size, 1, d]
-        gamma = gamma.unsqueeze(1) # adds 1 at position (index) of value specifed here it was 1, if 2. was given then it would add 1 at index 2 so the shape would be [batch_size, d, 1]
-        
+        if gamma.dim() == 2:
+            gamma = gamma.unsqueeze(1)
+        if beta.dim() == 2:
+            beta = beta.unsqueeze(1)# adds 1 at position (index) of value specifed here it was 1, if 2. was given then it would add 1 at index 2 so the shape would be [batch_size, d, 1]
+        # print("normalized", normalized.shape, "gamma", gamma.shape, "beta", beta.shape)
         return gamma * normalized + beta
 
 

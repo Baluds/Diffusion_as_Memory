@@ -2,7 +2,7 @@
 /myvenv
 __pycache__/
 /data/latents/
-/denoiser/checkpoints/
+/denoiser_module/checkpoints/
 /checkpoints/
 slurm-*.out
 denoiser/guides/

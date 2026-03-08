@@ -7,8 +7,8 @@ import torch
 from pathlib import Path
 from typing import Tuple
 
-from config import DenoiserConfig
-from denoiser import Denoiser, NoiseSchedule, one_step_estimate
+from denoiser_module.config import DenoiserConfig
+from denoiser_module.denoiser import Denoiser, NoiseSchedule, one_step_estimate
 
 
 class DenoiserInference:

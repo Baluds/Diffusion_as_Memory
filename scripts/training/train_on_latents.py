@@ -2,8 +2,8 @@
 Full training script for the Denoiser using saved latents.
 
 Usage:
-    python train_on_latents.py --train-latents ../data/latents/train_latents.pt \\
-                                --val-latents ../data/latents/val_latents.pt
+    python train_on_latents.py --train-latents ../data/latents/2.0/train_latents.pt \\
+                                --val-latents ../data/latents/2.0/val_latents.pt
 """
 
 import torch
@@ -11,9 +11,14 @@ import argparse
 from pathlib import Path
 from torch.utils.data import DataLoader
 import sys
+import os
 
-from config import DenoiserConfig
-from trainer import DenoiserTrainer, LatentDataset
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from denoiser_module.config import DenoiserConfig
+from denoiser_module.trainer import DenoiserTrainer, LatentDataset
 
 
 def main():

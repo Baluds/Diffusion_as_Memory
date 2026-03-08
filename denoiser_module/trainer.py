@@ -19,8 +19,8 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from utils.training_utils import ETATracker
-from config import DenoiserConfig
-from denoiser import Denoiser, NoiseSchedule, forward_diffusion
+from denoiser_module.config import DenoiserConfig
+from denoiser_module.denoiser import Denoiser, NoiseSchedule, forward_diffusion
 
 
 class LatentDataset(Dataset):
