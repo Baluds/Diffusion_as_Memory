@@ -61,10 +61,10 @@ class MSRAugmentedDataset(Dataset):
         example = self.data[idx] #dict
 
         x = example["x"]
-        y = example["y"]
+        # y = example["y"]
         
         encoded_x = self._tokenize(x, 64)
-        encoded_y = self._tokenize(y, 32)
+        # encoded_y = self._tokenize(y, 32)
 
         x_input_ids = encoded_x["input_ids"].squeeze(0)
         x_attention = encoded_x["attention_mask"].squeeze(0)
@@ -73,14 +73,14 @@ class MSRAugmentedDataset(Dataset):
 
         x_input_ids = encoded_x["input_ids"].squeeze(0)
         x_attention = encoded_x["attention_mask"].squeeze(0)
-        y_input_ids = encoded_y["input_ids"].squeeze(0)
-        y_attention = encoded_y["attention_mask"].squeeze(0)
+        # y_input_ids = encoded_y["input_ids"].squeeze(0)
+        # y_attention = encoded_y["attention_mask"].squeeze(0)
 
         return{
             "x_input_ids": x_input_ids,
             "x_attention": x_attention,
             "xpos_input_ids": x_input_ids,
             "xpos_attention": x_attention,
-            "y_input_ids": y_input_ids,
-            "y_attention": y_attention,
+            # "y_input_ids": y_input_ids,
+            # "y_attention": y_attention,
         }

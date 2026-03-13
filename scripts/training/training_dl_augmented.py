@@ -31,37 +31,47 @@ from models.forgetting_model import ForgettingModel
 def train_epoch(model, dataloader, optimizer):
     model.train()
     total_loss = 0
+    total_loss_nce = 0
+    total_loss_x = 0
     for batch in dataloader:
         optimizer.zero_grad()
-        loss, _, _ = model(batch)
+        loss, _, loss_nce, loss_x = model(batch)
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
-    return total_loss / len(dataloader)
+        total_loss_nce += loss_nce.item()
+        total_loss_x += loss_x.item()
+    return total_loss / len(dataloader), total_loss_nce / len(dataloader), total_loss_x / len(dataloader)
 
 
 @torch.no_grad()
 def validate_epoch(model, dataloader):
     model.eval()
     total_loss = 0
+    total_loss_nce = 0
+    total_loss_x = 0
     sample_outputs = []
 
     # Iterate over validation batches and collect all sample outputs
     for i, batch in enumerate(dataloader):
-        loss, logits_x, logits_y = model(batch)
+        loss, logits_x, loss_nce, loss_x = model(batch)
         total_loss += loss.item()
+        total_loss_nce += loss_nce.item()
+        total_loss_x += loss_x.item()
         # store tuple for this batch
-        sample_outputs.append((batch, logits_x, logits_y))
+        sample_outputs.append((batch, logits_x))
 
     avg_loss = total_loss / len(dataloader)
-    return avg_loss, sample_outputs
+    avg_loss_nce = total_loss_nce / len(dataloader)
+    avg_loss_x = total_loss_x / len(dataloader)
+    return avg_loss, avg_loss_nce, avg_loss_x, sample_outputs
 
 
 def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
     """Decode and save predictions for all collected validation batches.
 
     Args:
-        sample_outputs: list of (batch, logits_x, logits_y) tuples for each val batch
+        sample_outputs: list of (batch, logits_x) tuples for each val batch
         tokenizer: tokenizer for decoding ids
         epoch: current epoch index (0-based)
         output_dir: directory to write JSON file
@@ -69,23 +79,19 @@ def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
     os.makedirs(output_dir, exist_ok=True)
 
     results = []
-    for batch, logits_x, logits_y in sample_outputs:
+    for batch, logits_x in sample_outputs:
         pred_ids_x = torch.argmax(logits_x, dim=-1)
-        pred_ids_y = torch.argmax(logits_y, dim=-1)
 
         # Decode predictions and originals (tokenizer.batch_decode handles lists/tensors)
         decoded_x = tokenizer.batch_decode(pred_ids_x, skip_special_tokens=True)
-        decoded_y = tokenizer.batch_decode(pred_ids_y, skip_special_tokens=True)
+        # decoded_y = tokenizer.batch_decode(pred_ids_y, skip_special_tokens=True)
 
         original_x = tokenizer.batch_decode(batch["x_input_ids"], skip_special_tokens=True)
-        original_y = tokenizer.batch_decode(batch["y_input_ids"], skip_special_tokens=True)
 
         for i in range(len(decoded_x)):
             results.append({
                 "original_x": original_x[i],
-                "v0": decoded_x[i],
-                "original_y": original_y[i],
-                "u": decoded_y[i]
+                "v0": decoded_x[i]
             })
 
     # Write a single file containing all decoded samples from the validation set
@@ -179,7 +185,7 @@ def main():
     u_head = UHead(hidden_dim = encoder.hidden_dim_size, output_dim = 128)
     v_head = VHead(hidden_dim = encoder.hidden_dim_size)
     decoder_x = DecoderX()
-    decoder_y = DecoderY(hidden_dim = encoder.hidden_dim_size, u_dim = 128, num_slots = 8)
+    # decoder_y = DecoderY(hidden_dim = encoder.hidden_dim_size, u_dim = 128, num_slots = 8)
 
     model = ForgettingModel(
         encoder = encoder,
@@ -187,7 +193,7 @@ def main():
         u_head = u_head,
         v_head = v_head,
         decoder_x = decoder_x,
-        decoder_y = decoder_y,
+        # decoder_y = decoder_y,
     )
     model.to(device)
 
@@ -228,7 +234,7 @@ def main():
 
     for epoch in range(epochs):
         eta_tracker.start_epoch()
-        train_loss = train_epoch(model, train_loader, optimizer)
+        train_loss, train_loss_nce, train_loss_x = train_epoch(model, train_loader, optimizer)
 
         # Compute epoch timing and ETA
         epoch_elapsed, eta_seconds, eta_str = eta_tracker.end_epoch()
@@ -237,34 +243,37 @@ def main():
         if use_wandb:
             wandb.log({
                 "train/loss": train_loss,
+                "train/loss_nce": train_loss_nce,
+                "train/loss_x": train_loss_x,
                 **eta_tracker.wandb_metrics(epoch_elapsed, eta_seconds),
             }, step=epoch + 1)
 
         # Validate every val_interval epochs and on the last epoch
         if (epoch + 1) % val_interval == 0 or (epoch + 1) == epochs:
-            val_loss, sample_outputs = validate_epoch(model, val_loader)
+            val_loss, val_loss_nce, val_loss_x, sample_outputs = validate_epoch(model, val_loader)
 
             print(f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | ETA: {eta_str}", flush=True)
             print("-" * 30, flush=True)
 
             if use_wandb:
-                wandb.log({"val/loss": val_loss}, step=epoch + 1)
+                wandb.log({
+                    "val/loss": val_loss,
+                    "val/loss_nce": val_loss_nce,
+                    "val/loss_x": val_loss_x,
+                }, step=epoch + 1)
 
             if sample_outputs:
                 log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir)
 
                 # Log a sample table to W&B first batch only
                 if use_wandb:
-                    batch0, logits_x0, logits_y0 = sample_outputs[0]
+                    batch0, logits_x0 = sample_outputs[0]
                     pred_ids_x = torch.argmax(logits_x0, dim=-1)
-                    pred_ids_y = torch.argmax(logits_y0, dim=-1)
                     dec_x = tokenizer.batch_decode(pred_ids_x, skip_special_tokens=True)
-                    dec_y = tokenizer.batch_decode(pred_ids_y, skip_special_tokens=True)
                     orig_x = tokenizer.batch_decode(batch0["x_input_ids"], skip_special_tokens=True)
-                    orig_y = tokenizer.batch_decode(batch0["y_input_ids"], skip_special_tokens=True)
-                    table = wandb.Table(columns=["original_x", "v0_pred", "original_y", "u_pred"])
-                    for ox, px, oy, py in zip(orig_x, dec_x, orig_y, dec_y):
-                        table.add_data(ox, px, oy, py)
+                    table = wandb.Table(columns=["original_x", "v0_pred"])
+                    for ox, px in zip(orig_x, dec_x):
+                        table.add_data(ox, px)
                     wandb.log({"val/samples": table}, step=epoch + 1)
 
             # Save best model
