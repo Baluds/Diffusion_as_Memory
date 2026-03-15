@@ -17,7 +17,6 @@ if ROOT not in sys.path:
 
 from dataloader.dataloader_augmentated import MSRAugmentedDataset
 from models.decoder_prep.decoder_x import DecoderX
-from models.decoder_prep.decoder_y import DecoderY
 from models.encoder_prep.encoder import TextEncoder
 from models.forgetting_model import ForgettingModel
 from models.slot_pooling_prep.slot_pooling import SlotPooling
@@ -31,7 +30,6 @@ def build_model(device: torch.device) -> ForgettingModel:
     u_head = UHead(hidden_dim=encoder.hidden_dim_size, output_dim=128)
     v_head = VHead(hidden_dim=encoder.hidden_dim_size)
     decoder_x = DecoderX()
-    decoder_y = DecoderY(hidden_dim=encoder.hidden_dim_size, u_dim=128, num_slots=8)
 
     model = ForgettingModel(
         encoder=encoder,
@@ -39,7 +37,6 @@ def build_model(device: torch.device) -> ForgettingModel:
         u_head=u_head,
         v_head=v_head,
         decoder_x=decoder_x,
-        decoder_y=decoder_y,
     )
     return model.to(device)
 
@@ -73,14 +70,23 @@ def run_inference(
     max_samples: int,
     log_every: int,
     use_wandb: bool,
-) -> Tuple[float, List[Dict[str, str]], int]:
+    latents_output_path: str,
+) -> Tuple[float, List[Dict[str, str]], int, Dict[str, Any]]:
     total_loss = 0.0
     num_batches = 0
     total_examples = 0
     collected_samples: List[Dict[str, str]] = []
+    all_u: List[torch.Tensor] = []
+    all_v0: List[torch.Tensor] = []
+    all_texts: List[str] = []
 
     for batch_idx, batch in enumerate(tqdm(dataloader, desc="Running inference"), start=1):
-        loss, logits_x, logits_y = model(batch)
+        loss, logits_x, _, _ = model(batch)
+        u, v0 = model.encode_latents(batch)
+        all_u.append(u.detach().cpu())
+        all_v0.append(v0.detach().cpu())
+        batch_texts = tokenizer.batch_decode(batch["x_input_ids"], skip_special_tokens=True)
+        all_texts.extend(batch_texts)
 
         loss_value = loss.item()
         total_loss += loss_value
@@ -96,44 +102,50 @@ def run_inference(
             continue
 
         pred_ids_x = torch.argmax(logits_x, dim=-1).detach().cpu()
-        pred_ids_y = torch.argmax(logits_y, dim=-1).detach().cpu()
 
         decoded_x_pred = tokenizer.batch_decode(pred_ids_x, skip_special_tokens=True)
-        decoded_y_pred = tokenizer.batch_decode(pred_ids_y, skip_special_tokens=True)
 
         decoded_x_true = tokenizer.batch_decode(batch["x_input_ids"], skip_special_tokens=True)
-        decoded_y_true = tokenizer.batch_decode(batch["y_input_ids"], skip_special_tokens=True)
 
         remaining = max_samples - len(collected_samples)
-        for x_true, x_pred, y_true, y_pred in zip(
+        for x_true, x_pred in zip(
             decoded_x_true[:remaining],
             decoded_x_pred[:remaining],
-            decoded_y_true[:remaining],
-            decoded_y_pred[:remaining],
         ):
             collected_samples.append(
                 {
                     "x_true": x_true,
                     "x_pred": x_pred,
-                    "y_true": y_true,
-                    "y_pred": y_pred,
                 }
             )
 
     if num_batches == 0:
         raise RuntimeError("Inference dataloader is empty.")
 
+    if all_u:
+        latents_parent = os.path.dirname(latents_output_path)
+        if latents_parent:
+            os.makedirs(latents_parent, exist_ok=True)
+        latents_payload = {
+            "u": torch.cat(all_u, dim=0),
+            "v0": torch.cat(all_v0, dim=0),
+            "texts": all_texts,
+        }
+        torch.save(latents_payload, latents_output_path)
+    else:
+        latents_payload = {"u": None, "v0": None, "texts": []}
+
     avg_loss = total_loss / num_batches
-    return avg_loss, collected_samples, total_examples
+    return avg_loss, collected_samples, total_examples, latents_payload
 
 
 def log_samples_to_wandb(samples: List[Dict[str, str]], use_wandb: bool) -> None:
     if not use_wandb or not samples:
         return
 
-    table = wandb.Table(columns=["x_true", "x_pred", "y_true", "y_pred"])
+    table = wandb.Table(columns=["x_true", "x_pred"])
     for row in samples:
-        table.add_data(row["x_true"], row["x_pred"], row["y_true"], row["y_pred"])
+        table.add_data(row["x_true"], row["x_pred"])
 
     wandb.log({"inference/samples": table})
 
@@ -151,6 +163,12 @@ def main() -> None:
         type=str,
         default="./output/p0/inference/forgetting_model_predictions.json",
         help="Where to save decoded predictions",
+    )
+    parser.add_argument(
+        "--latents-output",
+        type=str,
+        default="./latents/inference/test_latents_p0_output.pt",
+        help="Where to save extracted u/v0 latents during inference",
     )
     parser.add_argument("--wandb-project", type=str, default="diffusion-as-memory", help="W&B project")
     parser.add_argument("--wandb-run-name", type=str, default=None, help="W&B run name")
@@ -195,13 +213,14 @@ def main() -> None:
             },
         )
 
-    avg_loss, samples, total_examples = run_inference(
+    avg_loss, samples, total_examples, _ = run_inference(
         model=model,
         dataloader=dataloader,
         tokenizer=tokenizer,
         max_samples=args.max_samples,
         log_every=args.log_every,
         use_wandb=use_wandb,
+        latents_output_path=args.latents_output,
     )
 
     output_parent = os.path.dirname(args.output_json)
@@ -213,6 +232,7 @@ def main() -> None:
     print(f"Inference complete. Avg loss: {avg_loss:.4f}")
     print(f"Examples processed: {total_examples}")
     print(f"Saved decoded predictions to: {args.output_json}")
+    print(f"Saved extracted latents to: {args.latents_output}")
 
     if use_wandb:
         wandb.log(
@@ -220,6 +240,7 @@ def main() -> None:
                 "inference/avg_loss": avg_loss,
                 "inference/num_examples": total_examples,
                 "inference/num_samples_logged": len(samples),
+                "inference/latents_output": args.latents_output,
             }
         )
         log_samples_to_wandb(samples, use_wandb=True)
