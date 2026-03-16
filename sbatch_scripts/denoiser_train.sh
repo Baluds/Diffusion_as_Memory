@@ -21,14 +21,15 @@ cd /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory
 # Run training with default config
 echo ""
 echo "Starting training..."
-echo "Train latents: ../data/latents/2.0/train_latents.pt (2198 samples)"
-echo "Val latents: ../data/latents/2.0/val_latents.pt"
+echo "Train latents: ../data/latents/no_g_psi/train_latents.pt"
+echo "Val latents: ../data/latents/no_g_psi/val_latents.pt"
 echo ""
 
 
 python scripts/training/train_on_latents.py \
-    --train-latents data/latents/2.0/train_latents.pt \
-    --val-latents data/latents/2.0/val_latents.pt \
+    --train-latents data/latents/no_g_psi/train_latents.pt \
+    --val-latents data/latents/no_g_psi/val_latents.pt \
+    --checkpoint-dir checkpoints/p1/no_g_psi \
     --wandb-project diffusion-as-memory \
     --wandb-run-name p1-training-run_$(date +%Y%m%d_%H%M%S)
 

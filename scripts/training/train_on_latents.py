@@ -27,7 +27,7 @@ def main():
                         help="Path to train_latents.pt file")
     parser.add_argument("--val-latents", type=str, required=True,
                         help="Path to val_latents.pt file")
-    parser.add_argument("--checkpoint-dir", type=str, default="./checkpoints",
+    parser.add_argument("--checkpoint-dir", type=str, default="./checkpoints/p1",
                         help="Directory to save checkpoints")
     parser.add_argument("--wandb-off", action="store_true",
                         help="Disable Weights & Biases logging")

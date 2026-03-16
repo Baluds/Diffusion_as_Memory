@@ -167,7 +167,7 @@ def main() -> None:
     parser.add_argument(
         "--latents-output",
         type=str,
-        default="./latents/inference/test_latents_p0_output.pt",
+        default="./data/latents/inference/test_latents_p0_output.pt",
         help="Where to save extracted u/v0 latents during inference",
     )
     parser.add_argument("--wandb-project", type=str, default="diffusion-as-memory", help="W&B project")

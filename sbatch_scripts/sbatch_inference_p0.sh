@@ -16,5 +16,5 @@ python3 /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/s
   --wandb-project diffusion-as-memory \
   --wandb-run-name p0-inference-run_$(date +%Y%m%d_%H%M%S) \
   --output-json output/p0/inference/forgetting_model_predictions_no_g_psi.json \
-  --latents-output latents/inference/test_latents_p0_output.pt
+  --latents-output data/latents/inference/test_latents_p0_output.pt
  

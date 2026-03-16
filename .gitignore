@@ -7,3 +7,4 @@ __pycache__/
 slurm-*.out
 denoiser_module/guides/
 wandb/
+output/p0/
