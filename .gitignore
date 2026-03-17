@@ -8,3 +8,4 @@ slurm-*.out
 denoiser_module/guides/
 wandb/
 output/p0/
+output/p2/
