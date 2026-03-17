@@ -20,7 +20,6 @@ from .denoiser import (
     one_step_estimate
 )
 from .trainer import DenoiserTrainer
-from .inference import DenoiserInference
 
 
 __all__ = [
@@ -39,6 +38,5 @@ __all__ = [
     
     # Training and inference
     "DenoiserTrainer",
-    "DenoiserInference",
 
 ]

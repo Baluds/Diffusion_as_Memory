@@ -9,3 +9,4 @@ denoiser_module/guides/
 wandb/
 output/p0/
 output/p2/
+scripts/training/train_all_phases.py
