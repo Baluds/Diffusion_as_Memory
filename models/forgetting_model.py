@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.gpsi import GPsi
+from denoiser_module.semantic_projection import SemanticProjectionModule
+from denoiser_module.g_psi_config import G_psi_config
 
 class ForgettingModel(nn.Module):
     def __init__(
@@ -18,7 +19,7 @@ class ForgettingModel(nn.Module):
         self.u_head = u_head
         self.v_head = v_head
         self.decoder_x = decoder_x
-        self.gpsi = GPsi(u_dim=128, d_model=self.encoder.hidden_dim_size)
+        self.g_psi = SemanticProjectionModule(config=G_psi_config,no_use_u=True,no_use_vt=True)
 
     def info_nce_loss(self, u, upos, temperature=0.1):
         """
@@ -65,7 +66,8 @@ class ForgettingModel(nn.Module):
         use_u_for_v0 = True  # can make this a config later, this is an optional flag for u+v0 instead of v0
 
         if use_u_for_v0:
-            v0 = self.gpsi(v0, u)
+            t_zero = torch.zeros(B, dtype=torch.long, device=device)
+            v0 = self.g_psi(v_hat_0=v0, t=t_zero)
 
         loss_x, logits_x = self.decoder_x(v0, slot_mask, labels_x)
         # loss_y, logits_y = self.decoder_y(u, labels_y)
