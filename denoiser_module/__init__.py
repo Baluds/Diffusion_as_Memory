@@ -19,7 +19,7 @@ from .denoiser import (
     forward_diffusion,
     one_step_estimate
 )
-from .trainer import DenoiserTrainer, DummyLatentDataset
+from .trainer import DenoiserTrainer
 from .inference import DenoiserInference
 
 
@@ -39,7 +39,6 @@ __all__ = [
     
     # Training and inference
     "DenoiserTrainer",
-    "DummyLatentDataset",
     "DenoiserInference",
 
 ]

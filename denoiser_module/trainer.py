@@ -57,57 +57,19 @@ class LatentDataset(Dataset):
         
         self.v0 = v0_loaded
         
-        # Project u to [num_samples, L, d] using linear projection
-        # u_raw is [num_samples, d_u], we want [num_samples, L, d]
-        self.proj = nn.Linear(d_u, L * d)
-        
-        # Project and reshape: [num_samples, L*d] -> [num_samples, L, d]
-        with torch.no_grad():
-            u_projected = self.proj(self.u_raw)  # [num_samples, L*d]
-            self.u = u_projected.view(num_samples, L, d)
-        
         # Validate shapes
         assert self.v0.shape == (num_samples, L, d), \
             f"v0 shape mismatch: expected [{num_samples}, {L}, {d}], got {self.v0.shape}"
-        assert self.u.shape == (num_samples, L, d), \
-            f"u shape mismatch: expected [{num_samples}, {L}, {d}], got {self.u.shape}"
         
         print(f"Loaded {num_samples} samples from {latent_path}")
-        print(f"  v0: {self.v0.shape}, u (projected): {self.u.shape}")
+        print(f"  v0: {self.v0.shape}, u_raw: {self.u_raw.shape}")
     
     def __len__(self) -> int:
         return self.v0.shape[0]
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """Returns (v0, u) pair for a single sample."""
-        return self.v0[idx], self.u[idx]
-
-
-class DummyLatentDataset(Dataset):
-    """
-    Dummy dataset for testing. In practice, use LatentDataset instead.
-    """
-    
-    def __init__(self, num_samples: int, L: int, d: int):
-        """
-        Args:
-            num_samples: number of sample pairs
-            L: number of slots
-            d: embedding dimension
-        """
-        self.num_samples = num_samples
-        self.L = L
-        self.d = d
-    
-    def __len__(self) -> int:
-        return self.num_samples
-    
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Returns (v0, u) pair."""
-        # Random clean latent and semantic anchor
-        v0 = torch.randn(self.L, self.d)
-        u = torch.randn(self.L, self.d)
-        return v0, u
+        return self.v0[idx], self.u_raw[idx]
 
 
 class DenoiserTrainer:
@@ -205,7 +167,7 @@ class DenoiserTrainer:
         for v0_batch, u_batch in pbar:
             # Move to device
             v0_batch = v0_batch.to(self.device)  # [batch_size, L, d]
-            u_batch = u_batch.to(self.device)    # [batch_size, L, d]
+            u_batch = u_batch.to(self.device)    # [batch_size, u_dim]
             batch_size = v0_batch.shape[0]
             
             # Sample random timesteps
@@ -287,6 +249,7 @@ class DenoiserTrainer:
             'config': {
                 'L': self.config.L,
                 'd': self.config.d,
+                'u_dim': self.config.u_dim,
                 'T': self.config.T,
                 'N_blocks': self.config.N_blocks,
                 'n_heads': self.config.n_heads,
@@ -400,38 +363,3 @@ class DenoiserTrainer:
                 self.wandb.finish()
             except Exception:
                 pass
-
-
-def main():
-    """Example training script."""
-    config = DenoiserConfig()
-    
-    # Create dummy datasets
-    train_dataset = DummyLatentDataset(num_samples=100, L=config.L, d=config.d)
-    val_dataset = DummyLatentDataset(num_samples=20, L=config.L, d=config.d)
-    
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config.batch_size,
-        shuffle=True,
-        num_workers=0
-    )
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=config.batch_size,
-        shuffle=False,
-        num_workers=0
-    )
-    
-    # Create trainer
-    trainer = DenoiserTrainer(
-        config,
-        checkpoint_dir="./checkpoints"
-    )
-    
-    # Train
-    trainer.train(train_loader, val_loader, num_epochs=config.num_epochs)
-
-
-if __name__ == "__main__":
-    main()

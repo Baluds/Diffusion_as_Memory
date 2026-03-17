@@ -97,16 +97,16 @@ class TimestepEmbedding(nn.Module):
 class AdaLN(nn.Module):
     """Adaptive Layer Normalization modulated by timestep embedding."""
     
-    def __init__(self, d: int):
+    def __init__(self, d: int, d_cond: int):
         super().__init__()
         self.norm = nn.LayerNorm(d)
-        self.affine = nn.Linear(d, 2 * d)  # outputs gamma and beta
+        self.affine = nn.Linear(d_cond, 2 * d)  # outputs gamma and beta
     
     def forward(self, x: torch.Tensor, t_emb: torch.Tensor) -> torch.Tensor:
         """
         Args:
             x: tensor of shape [batch_size, L, d]
-            t_emb: tensor of shape [batch_size, d]
+            t_emb: tensor of shape [batch_size, d_cond]
         
         Returns:
             output: tensor of shape [batch_size, L, d]
@@ -200,18 +200,19 @@ class MultiHeadAttention(nn.Module):
 class TransformerBlock(nn.Module):
     """Single Transformer block with self-attention, cross-attention, and FFN."""
     
-    def __init__(self, d: int, n_heads: int, d_ff: int, dropout: float = 0.1):
+    def __init__(self, d: int, n_heads: int, d_ff: int, u_dim: int = 0, dropout: float = 0.1):
         super().__init__()
         
-        # Adaptive Layer Norm for timestep modulation
-        self.adalan1 = AdaLN(d)
-        self.adalan2 = AdaLN(d)
+        # d_cond = d (t_emb) + u_dim (raw u); if u_dim=0 reverts to t-only conditioning
+        d_cond = d + u_dim
+        self.adalan1 = AdaLN(d, d_cond)
+        self.adalan2 = AdaLN(d, d_cond)
         
         # Self-attention
         self.self_attn = MultiHeadAttention(d, n_heads)
         
         # Cross-attention (x attends to u)
-        self.cross_attn = MultiHeadAttention(d, n_heads)
+        # self.cross_attn = MultiHeadAttention(d, n_heads)
         
         # Feed-forward network
         self.ffn = nn.Sequential(
@@ -238,15 +239,18 @@ class TransformerBlock(nn.Module):
             output: [batch_size, L, d]
         
         """
+        # fuse timestep and u into a single conditioning vector [B, d + u_dim]
+        c = torch.cat([t_emb, u], dim=-1)
+
         # a. AdaLN + b. Self-Attention
-        x_normalized = self.adalan1(x, t_emb)
+        x_normalized = self.adalan1(x, c)
         x = x + self.dropout(self.self_attn(x_normalized, x_normalized, x_normalized))
         
         # c. Cross-Attention (x attends to u, no AdaLN before it)
-        x = x + self.dropout(self.cross_attn(x, u, u))
+        # x = x + self.dropout(self.cross_attn(x, u, u))
         
         # d. AdaLN + e. FFN
-        x_normalized = self.adalan2(x, t_emb)
+        x_normalized = self.adalan2(x, c)
         x = x + self.dropout(self.ffn(x_normalized))
         
         return x
@@ -279,6 +283,7 @@ class Denoiser(nn.Module):
                 d=config.d,
                 n_heads=config.n_heads,
                 d_ff=config.d_ff,
+                u_dim=config.u_dim,
                 dropout=config.dropout
             )
             for _ in range(config.N_blocks)
@@ -303,7 +308,8 @@ class Denoiser(nn.Module):
             u: semantic anchor [batch_size, L, d]
         
         Returns:
-            eps_hat: predicted noise [batch_size, L, d]
+            eps_hat: predicted noise [batch_size, L, d] 
+            trying with [batch_size, K]
         """
         # Get timestep embedding
         t_emb = self.timestep_embedding(t)  # [batch_size, d]
