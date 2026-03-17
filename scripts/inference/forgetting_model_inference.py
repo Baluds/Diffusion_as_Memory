@@ -22,6 +22,8 @@ from models.forgetting_model import ForgettingModel
 from models.slot_pooling_prep.slot_pooling import SlotPooling
 from models.uv_heads_prep.u_head import UHead
 from models.uv_heads_prep.v_head import VHead
+from denoiser_module.semantic_projection import SemanticProjectionModule
+from denoiser_module.g_psi_config import G_psi_config
 
 
 def build_model(device: torch.device) -> ForgettingModel:
@@ -30,6 +32,7 @@ def build_model(device: torch.device) -> ForgettingModel:
     u_head = UHead(hidden_dim=encoder.hidden_dim_size, output_dim=128)
     v_head = VHead(hidden_dim=encoder.hidden_dim_size)
     decoder_x = DecoderX()
+    g_psi = SemanticProjectionModule(config=G_psi_config,no_use_u=True,no_use_vt=True)
 
     model = ForgettingModel(
         encoder=encoder,
@@ -37,6 +40,7 @@ def build_model(device: torch.device) -> ForgettingModel:
         u_head=u_head,
         v_head=v_head,
         decoder_x=decoder_x,
+        g_psi=g_psi
     )
     return model.to(device)
 

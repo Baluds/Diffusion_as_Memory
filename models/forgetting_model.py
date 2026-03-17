@@ -12,6 +12,7 @@ class ForgettingModel(nn.Module):
         u_head: nn.Module,
         v_head: nn.Module,
         decoder_x: nn.Module,
+        g_psi: nn.Module,
     ):
         super().__init__()
         self.encoder = encoder
@@ -19,7 +20,7 @@ class ForgettingModel(nn.Module):
         self.u_head = u_head
         self.v_head = v_head
         self.decoder_x = decoder_x
-        self.g_psi = SemanticProjectionModule(config=G_psi_config,no_use_u=True,no_use_vt=True)
+        self.g_psi = g_psi
 
     def info_nce_loss(self, u, upos, temperature=0.1):
         """

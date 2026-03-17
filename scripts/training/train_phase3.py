@@ -66,6 +66,7 @@ def build_p0_model(device):
     u_head = UHead(hidden_dim=encoder.hidden_dim_size, output_dim=U_DIM)
     v_head = VHead(hidden_dim=encoder.hidden_dim_size)
     decoder_x = DecoderX()
+    g_psi = SemanticProjectionModule(config=G_psi_config,no_use_u=True,no_use_vt=True)
 
     model = ForgettingModel(
         encoder=encoder,
@@ -73,6 +74,7 @@ def build_p0_model(device):
         u_head=u_head,
         v_head=v_head,
         decoder_x=decoder_x,
+        g_psi=g_psi,
     )
     model.to(device)
     return model
@@ -123,9 +125,9 @@ def select_xt_labels(batch, t, device):
     return labels, xt_index
 
 
-def train_epoch(p0_model, denoiser, g_psi, noise_schedule, dataloader, optimizer, device):
+def train_epoch(p0_model, denoiser, noise_schedule, dataloader, optimizer, device):
     """Run one training epoch. Returns (total_loss, loss_recon, loss_clean) averages."""
-    g_psi.train()
+    p0_model.g_psi.train()
     p0_model.decoder_x.train()
 
     total_loss = 0
@@ -152,21 +154,21 @@ def train_epoch(p0_model, denoiser, g_psi, noise_schedule, dataloader, optimizer
             v_hat_0 = one_step_estimate(vt, eps_hat, t, noise_schedule)
 
         labels_noisy, _ = select_xt_labels(batch, t, device)   # [B, seq_len]
-        vt_tilde = g_psi(v_hat_0=v_hat_0, t=t, v_t=vt, u=u)    # [B, L, d]
+        vt_tilde = p0_model.g_psi(v_hat_0=v_hat_0, t=t, v_t=vt, u=u)    # [B, L, d]
         slot_mask = torch.ones(batch_size, L_SLOTS, device=device)
         loss_recon, logits = p0_model.decoder_x(vt_tilde, slot_mask, labels_noisy)
 
         # Clean reconstruction loss (t=0, labels = original x)
         labels_clean = batch["x_input_ids"].to(device)          # [B, seq_len]
         t_zero = torch.zeros(batch_size, dtype=torch.long, device=device)
-        v0_tilde = g_psi(v_hat_0=v0, t=t_zero, v_t=v0, u=u)
+        v0_tilde = p0_model.g_psi(v_hat_0=v0, t=t_zero, v_t=v0, u=u)
         loss_clean, _ = p0_model.decoder_x(v0_tilde, slot_mask, labels_clean)
 
         # Total loss
         loss = loss_recon + LAMBDA_CLEAN * loss_clean
         loss.backward()
         torch.nn.utils.clip_grad_norm_(
-            list(g_psi.parameters()) + list(p0_model.decoder_x.parameters()),
+            list(p0_model.g_psi.parameters()) + list(p0_model.decoder_x.parameters()),
             max_norm=1.0,
         )
         optimizer.step()
@@ -180,9 +182,9 @@ def train_epoch(p0_model, denoiser, g_psi, noise_schedule, dataloader, optimizer
 
 
 @torch.no_grad()
-def validate_epoch(p0_model, denoiser, g_psi, noise_schedule, dataloader, device):
+def validate_epoch(p0_model, denoiser, noise_schedule, dataloader, device):
     """Run one validation epoch. Returns (total_loss, loss_recon, loss_clean, sample_outputs)."""
-    g_psi.eval()
+    p0_model.g_psi.eval()
     p0_model.decoder_x.eval()
 
     total_loss = 0
@@ -203,14 +205,14 @@ def validate_epoch(p0_model, denoiser, g_psi, noise_schedule, dataloader, device
         v_hat_0 = one_step_estimate(vt, eps_hat, t, noise_schedule)
         labels_noisy, xt_index = select_xt_labels(batch, t, device)
         # Noisy reconstruction
-        vt_tilde = g_psi(v_hat_0=v_hat_0, t=t, v_t=vt, u=u)
+        vt_tilde = p0_model.g_psi(v_hat_0=v_hat_0, t=t, v_t=vt, u=u)
         slot_mask = torch.ones(batch_size, L_SLOTS, device=device)
         loss_recon, logits_noisy = p0_model.decoder_x(vt_tilde, slot_mask, labels_noisy)
 
         # Clean (labels = original x)
         labels_clean = batch["x_input_ids"].to(device)
         t_zero = torch.zeros(batch_size, dtype=torch.long, device=device)
-        v0_tilde = g_psi(v_hat_0=v0, t=t_zero, v_t=v0, u=u)
+        v0_tilde = p0_model.g_psi(v_hat_0=v0, t=t_zero, v_t=v0, u=u)
         loss_clean, logits_clean = p0_model.decoder_x(v0_tilde, slot_mask, labels_clean)
 
         loss = loss_recon + LAMBDA_CLEAN * loss_clean
@@ -339,20 +341,10 @@ def main():
     # Unfreeze decoder for fine-tuning
     for param in p0_model.decoder_x.parameters():
         param.requires_grad = True
-
-    # Create G_psi
-    g_psi = SemanticProjectionModule(
-        config=G_psi_config
-    ).to(device)
-
-    # can be deleted after confirming correct loading and training
-    trainable_params = sum(p.numel() for p in g_psi.parameters()) + sum(
-        p.numel() for p in p0_model.decoder_x.parameters()
-    )
-    frozen_params = sum(
-        p.numel() for p in p0_model.parameters() if not p.requires_grad
-    )
-    print(f"Trainable params: {trainable_params:,}  Frozen params: {frozen_params:,}")
+    
+    # Unfreeze G_psi 
+    for param in p0_model.g_psi.parameters():
+        param.requires_grad = True
 
     # Noise schedule (alphas)
     noise_schedule = NoiseSchedule(T=T_DIFFUSION, schedule_type=NOISE_SCHEDULE)
@@ -370,7 +362,7 @@ def main():
 
     # Optimizer (only G_psi + decoder)
     optimizer = torch.optim.Adam(
-        list(g_psi.parameters()) + list(p0_model.decoder_x.parameters()),
+        list(p0_model.g_psi.parameters()) + list(p0_model.decoder_x.parameters()),
         lr=LEARNING_RATE,
     )
 
@@ -415,7 +407,7 @@ def main():
         eta_tracker.start_epoch()
 
         train_loss, train_recon, train_clean = train_epoch(
-            p0_model, denoiser, g_psi, noise_schedule, train_loader, optimizer, device,
+            p0_model, denoiser, noise_schedule, train_loader, optimizer, device,
         )
 
         epoch_elapsed, eta_seconds, eta_str = eta_tracker.end_epoch()
@@ -435,7 +427,7 @@ def main():
         # Validate every VAL_INTERVAL epochs and on the last epoch
         if (epoch + 1) % VAL_INTERVAL == 0 or (epoch + 1) == EPOCHS:
             val_loss, val_recon, val_clean, sample_outputs = validate_epoch(
-                p0_model, denoiser, g_psi, noise_schedule, val_loader, device,
+                p0_model, denoiser, noise_schedule, val_loader, device,
             )
 
             print(
@@ -486,7 +478,7 @@ def main():
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 save_checkpoint(
-                    g_psi,
+                    p0_model.g_psi,
                     p0_model.decoder_x,
                     optimizer,
                     epoch + 1,
@@ -508,7 +500,7 @@ def main():
 
     # Save final checkpoint
     save_checkpoint(
-        g_psi,
+        p0_model.g_psi,
         p0_model.decoder_x,
         optimizer,
         EPOCHS,

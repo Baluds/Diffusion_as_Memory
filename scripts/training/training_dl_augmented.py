@@ -26,6 +26,8 @@ from models.uv_heads_prep.v_head import VHead
 from models.decoder_prep.decoder_x import DecoderX
 from models.decoder_prep.decoder_y import DecoderY
 from models.forgetting_model import ForgettingModel
+from denoiser_module.semantic_projection import SemanticProjectionModule
+from denoiser_module.g_psi_config import G_psi_config
 
 
 def train_epoch(model, dataloader, optimizer):
@@ -185,6 +187,7 @@ def main():
     u_head = UHead(hidden_dim = encoder.hidden_dim_size, output_dim = 128)
     v_head = VHead(hidden_dim = encoder.hidden_dim_size)
     decoder_x = DecoderX()
+    g_psi = SemanticProjectionModule(config=G_psi_config,no_use_u=True,no_use_vt=True)
     # decoder_y = DecoderY(hidden_dim = encoder.hidden_dim_size, u_dim = 128, num_slots = 8)
 
     model = ForgettingModel(
@@ -193,7 +196,7 @@ def main():
         u_head = u_head,
         v_head = v_head,
         decoder_x = decoder_x,
-        # decoder_y = decoder_y,
+        g_psi = g_psi,
     )
     model.to(device)
 
