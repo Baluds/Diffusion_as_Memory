@@ -8,6 +8,8 @@ class MSRAugmentedDataset(Dataset):
             self.data = json.load(f)
         self.tokenizer = tokenizer
         self.drop_prob = drop_prob
+        self.max_xt_items = 10
+        self.max_length = 64
 
         self.pad_id = tokenizer.pad_token_id
         self.cls_like_ids = set(filter(lambda x: x is not None, 
@@ -61,6 +63,7 @@ class MSRAugmentedDataset(Dataset):
         example = self.data[idx] #dict
 
         x = example["x"]
+        xt_list = example.get("xt", [x])
         # y = example["y"]
         
         encoded_x = self._tokenize(x, 64)
@@ -71,16 +74,19 @@ class MSRAugmentedDataset(Dataset):
         # xpos_input_ids = self._drop_tokens(x_input_ids, x_attention)
         # xpos_attention = (xpos_input_ids != self.pad_id).long()
 
-        x_input_ids = encoded_x["input_ids"].squeeze(0)
-        x_attention = encoded_x["attention_mask"].squeeze(0)
-        # y_input_ids = encoded_y["input_ids"].squeeze(0)
-        # y_attention = encoded_y["attention_mask"].squeeze(0)
+        xt_count = min(len(xt_list), self.max_xt_items)
+        xt_input_ids = torch.full(
+            (self.max_xt_items, self.max_length), self.pad_id, dtype=torch.long
+        )
+        for i in range(xt_count):
+            enc_xt = self._tokenize(xt_list[i],64)
+            xt_input_ids[i] = enc_xt["input_ids"].squeeze(0)
 
         return{
             "x_input_ids": x_input_ids,
             "x_attention": x_attention,
             "xpos_input_ids": x_input_ids,
             "xpos_attention": x_attention,
-            # "y_input_ids": y_input_ids,
-            # "y_attention": y_attention,
+            "xt_input_ids": xt_input_ids, # [max_xt_items, seq_len]
+            "xt_count": torch.tensor(xt_count, dtype=torch.long),
         }
