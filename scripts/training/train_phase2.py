@@ -8,7 +8,7 @@ Label selection from xt (progressive degradations):
   e.g. T=1000, bucket=100: t=50→xt[0], t=150→xt[1], t=950→xt[9] or last
 
 Usage:
-    python train_phase3.py \\
+    python train_phase2.py \\
         --p0-checkpoint ./checkpoints/p0/2loss/best_model.pt \\
         --wandb-run-name p2-gpsi-run
 """
@@ -38,7 +38,7 @@ from models.g_psi_module.semantic_projection import SemanticProjectionModule
 from models.denoiser_module.config import DenoiserConfig
 from models.denoiser_module.denoiser import Denoiser, NoiseSchedule, forward_diffusion, one_step_estimate
 from models.g_psi_module.g_psi_config import G_psi_config
-from train_phase3_config import (
+from train_phase2_config import (
     BATCH_SIZE,
     EPOCHS,
     LEARNING_RATE,

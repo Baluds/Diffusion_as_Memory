@@ -10,10 +10,10 @@
 module load conda/latest
 conda activate /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/.conda/envs/diffusion
 
-echo "PHASE 3 (P2): G_psi Semantic Projection + Decoder Fine-tuning"
+echo "PHASE 2 (P2): G_psi Semantic Projection + Decoder Fine-tuning"
 echo ""
 
-python /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/scripts/training/train_phase3.py \
+python /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/scripts/training/train_phase2.py \
     --p0-checkpoint ./checkpoints/p0/mod_g_psi/best_model.pt \
     --denoiser-checkpoint ./checkpoints/p1/mod_g_psi/best_model.pt \
     --checkpoint-dir ./checkpoints/p2/temp \
@@ -22,4 +22,4 @@ python /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/sc
     --wandb-project diffusion-as-memory \
     --wandb-run-name p2-gpsi-run_$(date +%Y%m%d_%H%M%S)
 
-echo "Phase 3 training complete!"
+echo "Phase 2 training complete!"
