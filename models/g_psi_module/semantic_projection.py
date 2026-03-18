@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import math
 from typing import Optional
-from denoiser_module.denoiser import TimestepEmbedding, AdaLN 
-from denoiser_module.g_psi_config import G_psi_config
+from models.denoiser_module.denoiser import TimestepEmbedding, AdaLN 
+from models.g_psi_module.g_psi_config import G_psi_config
 
 
 class SPMBlock(nn.Module):

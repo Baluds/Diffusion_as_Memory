@@ -23,9 +23,9 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from denoiser_module.config import DenoiserConfig
-from denoiser_module.denoiser import Denoiser, NoiseSchedule, forward_diffusion, one_step_estimate
-from denoiser_module.trainer import LatentDataset
+from models.denoiser_module.config import DenoiserConfig
+from models.denoiser_module.denoiser import Denoiser, NoiseSchedule, forward_diffusion, one_step_estimate
+from models.denoiser_module.trainer import LatentDataset
 
 EVAL_TIMESTEPS = [50, 100, 250, 500, 750, 1000]  # timesteps to evaluate one-step denoising
 MAX_SAMPLES = 20      # samples to save in output JSON

@@ -1,7 +1,6 @@
 #!/bin/bash
-#SBATCH --partition=gpu
-#SBATCH --account=pi_dagarwal_umass_edu
-#SBATCH --gpus=l40s:1
+#SBATCH --partition=superpod-a100
+#SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --time=20:00:00
 #SBATCH --job-name=denoiser-train
@@ -30,7 +29,7 @@ echo ""
 python scripts/training/train_on_latents.py \
     --train-latents data/latents/mod_g_psi/train_latents.pt \
     --val-latents data/latents/mod_g_psi/val_latents.pt \
-    --checkpoint-dir checkpoints/p1/mod_g_psi \
+    --checkpoint-dir checkpoints/p1/temp \
     --wandb-project diffusion-as-memory \
     --wandb-run-name p1-training-run_$(date +%Y%m%d_%H%M%S)
 

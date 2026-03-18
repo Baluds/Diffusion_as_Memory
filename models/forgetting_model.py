@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from denoiser_module.semantic_projection import SemanticProjectionModule
-from denoiser_module.g_psi_config import G_psi_config
+
 
 class ForgettingModel(nn.Module):
     def __init__(

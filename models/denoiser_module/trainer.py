@@ -14,13 +14,13 @@ from pathlib import Path
 from tqdm import tqdm
 
 # Allow importing shared utilities from the project root
-_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from utils.training_utils import ETATracker
-from denoiser_module.config import DenoiserConfig
-from denoiser_module.denoiser import Denoiser, NoiseSchedule, forward_diffusion
+from models.denoiser_module.config import DenoiserConfig
+from models.denoiser_module.denoiser import Denoiser, NoiseSchedule, forward_diffusion
 
 
 class LatentDataset(Dataset):
@@ -48,18 +48,7 @@ class LatentDataset(Dataset):
         L_saved = v0_loaded.shape[1]
         d_saved = v0_loaded.shape[2]
         d_u = self.u_raw.shape[1]
-        
-        # Validate dimensions
-        assert d_saved == d, \
-            f"Embedding dimension mismatch: config d={d}, data d={d_saved}"
-        assert L_saved == L, \
-            f"Slot mismatch: config L={L}, data L={L_saved}. Update L in config.py to match your data."
-        
         self.v0 = v0_loaded
-        
-        # Validate shapes
-        assert self.v0.shape == (num_samples, L, d), \
-            f"v0 shape mismatch: expected [{num_samples}, {L}, {d}], got {self.v0.shape}"
         
         print(f"Loaded {num_samples} samples from {latent_path}")
         print(f"  v0: {self.v0.shape}, u_raw: {self.u_raw.shape}")

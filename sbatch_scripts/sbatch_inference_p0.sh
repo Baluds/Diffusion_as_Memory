@@ -10,11 +10,11 @@
 module load conda/latest
 conda activate /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/.conda/envs/diffusion
 python3 /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/scripts/inference/forgetting_model_inference.py \
-  --model-path checkpoints/p0/no_g_psi/best_model.pt \
+  --model-path checkpoints/p0/mod_g_psi/best_model.pt \
   --data-path data/final/test.json \
   --batch-size 16 \
   --wandb-project diffusion-as-memory \
   --wandb-run-name p0-inference-run_$(date +%Y%m%d_%H%M%S) \
-  --output-json output/p0/inference/forgetting_model_predictions_no_g_psi.json \
-  --latents-output data/latents/inference/test_latents_p0_output.pt
+  --output-json output/p0/inference/temp.json \
+  --latents-output data/latents/inference/temp.pt
  

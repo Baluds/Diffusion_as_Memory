@@ -26,8 +26,8 @@ from models.uv_heads_prep.v_head import VHead
 from models.decoder_prep.decoder_x import DecoderX
 from models.decoder_prep.decoder_y import DecoderY
 from models.forgetting_model import ForgettingModel
-from denoiser_module.semantic_projection import SemanticProjectionModule
-from denoiser_module.g_psi_config import G_psi_config
+from models.g_psi_module.semantic_projection import SemanticProjectionModule
+from models.g_psi_module.g_psi_config import G_psi_config
 
 
 def train_epoch(model, dataloader, optimizer):

@@ -10,8 +10,8 @@
 module load conda/latest
 conda activate /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/.conda/envs/diffusion
 python3 /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/scripts/training/training_dl_augmented.py \
- --latents-dir ./data/latents/mod_g_psi \
- --checkpoint-dir ./checkpoints/p0/mod_g_psi \
- --output-dir ./output/p0/mod_g_psi \
+ --latents-dir ./data/latents/temp \
+ --checkpoint-dir ./checkpoints/p0/temp \
+ --output-dir ./output/p0/temp \
  --wandb-project diffusion-as-memory \
- --wandb-run-name p0-training-run-mod_g_psi_$(date +%Y%m%d_%H%M%S)
+ --wandb-run-name p0-training-run_$(date +%Y%m%d_%H%M%S)
