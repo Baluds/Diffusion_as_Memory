@@ -346,6 +346,10 @@ def main():
     for param in p0_model.g_psi.parameters():
         param.requires_grad = True
 
+    trainable_params = sum(p.numel() for p in p0_model.g_psi.parameters()) + sum(
+        p.numel() for p in p0_model.decoder_x.parameters()
+    )
+
     # Noise schedule (alphas)
     noise_schedule = NoiseSchedule(T=T_DIFFUSION, schedule_type=NOISE_SCHEDULE)
 
