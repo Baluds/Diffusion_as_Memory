@@ -34,15 +34,14 @@ from models.uv_heads_prep.u_head import UHead
 from models.uv_heads_prep.v_head import VHead
 from models.decoder_prep.decoder_x import DecoderX
 from models.forgetting_model import ForgettingModel
-from denoiser_module.semantic_projection import SemanticProjectionModule
-from denoiser_module.config import DenoiserConfig
-from denoiser_module.denoiser import Denoiser, NoiseSchedule, forward_diffusion, one_step_estimate
-from denoiser_module.g_psi_config import G_psi_config
+from models.g_psi_module.semantic_projection import SemanticProjectionModule
+from models.denoiser_module.config import DenoiserConfig
+from models.denoiser_module.denoiser import Denoiser, NoiseSchedule, forward_diffusion, one_step_estimate
+from models.g_psi_module.g_psi_config import G_psi_config
 from train_phase3_config import (
     BATCH_SIZE,
     EPOCHS,
     LEARNING_RATE,
-    LAMBDA_CLEAN,
     VAL_INTERVAL,
     GPSI_N_BLOCKS,
     GPSI_N_HEADS,
@@ -126,13 +125,11 @@ def select_xt_labels(batch, t, device):
 
 
 def train_epoch(p0_model, denoiser, noise_schedule, dataloader, optimizer, device):
-    """Run one training epoch. Returns (total_loss, loss_recon, loss_clean) averages."""
+    """Run one training epoch. Returns (total_loss) averages."""
     p0_model.g_psi.train()
     p0_model.decoder_x.train()
 
     total_loss = 0
-    total_loss_recon = 0
-    total_loss_clean = 0
 
     for batch in tqdm(dataloader, desc="Training"):
         optimizer.zero_grad()
@@ -158,14 +155,9 @@ def train_epoch(p0_model, denoiser, noise_schedule, dataloader, optimizer, devic
         slot_mask = torch.ones(batch_size, L_SLOTS, device=device)
         loss_recon, logits = p0_model.decoder_x(vt_tilde, slot_mask, labels_noisy)
 
-        # Clean reconstruction loss (t=0, labels = original x)
-        labels_clean = batch["x_input_ids"].to(device)          # [B, seq_len]
-        t_zero = torch.zeros(batch_size, dtype=torch.long, device=device)
-        v0_tilde = p0_model.g_psi(v_hat_0=v0, t=t_zero, v_t=v0, u=u)
-        loss_clean, _ = p0_model.decoder_x(v0_tilde, slot_mask, labels_clean)
 
         # Total loss
-        loss = loss_recon + LAMBDA_CLEAN * loss_clean
+        loss = loss_recon
         loss.backward()
         torch.nn.utils.clip_grad_norm_(
             list(p0_model.g_psi.parameters()) + list(p0_model.decoder_x.parameters()),
@@ -174,22 +166,18 @@ def train_epoch(p0_model, denoiser, noise_schedule, dataloader, optimizer, devic
         optimizer.step()
 
         total_loss += loss.item()
-        total_loss_recon += loss_recon.item()
-        total_loss_clean += loss_clean.item()
 
     n = len(dataloader)
-    return total_loss / n, total_loss_recon / n, total_loss_clean / n
+    return total_loss / n
 
 
 @torch.no_grad()
 def validate_epoch(p0_model, denoiser, noise_schedule, dataloader, device):
-    """Run one validation epoch. Returns (total_loss, loss_recon, loss_clean, sample_outputs)."""
+    """Run one validation epoch. Returns (total_loss, sample_outputs)."""
     p0_model.g_psi.eval()
     p0_model.decoder_x.eval()
 
     total_loss = 0
-    total_loss_recon = 0
-    total_loss_clean = 0
     sample_outputs = []
 
     for batch in tqdm(dataloader, desc="Validating"):
@@ -209,21 +197,13 @@ def validate_epoch(p0_model, denoiser, noise_schedule, dataloader, device):
         slot_mask = torch.ones(batch_size, L_SLOTS, device=device)
         loss_recon, logits_noisy = p0_model.decoder_x(vt_tilde, slot_mask, labels_noisy)
 
-        # Clean (labels = original x)
-        labels_clean = batch["x_input_ids"].to(device)
-        t_zero = torch.zeros(batch_size, dtype=torch.long, device=device)
-        v0_tilde = p0_model.g_psi(v_hat_0=v0, t=t_zero, v_t=v0, u=u)
-        loss_clean, logits_clean = p0_model.decoder_x(v0_tilde, slot_mask, labels_clean)
-
-        loss = loss_recon + LAMBDA_CLEAN * loss_clean
+        loss = loss_recon
         total_loss += loss.item()
-        total_loss_recon += loss_recon.item()
-        total_loss_clean += loss_clean.item()
 
-        sample_outputs.append((batch, logits_noisy, logits_clean, t, xt_index))
+        sample_outputs.append((batch, logits_noisy, t, xt_index))
 
     n = len(dataloader)
-    return total_loss / n, total_loss_recon / n, total_loss_clean / n, sample_outputs
+    return total_loss / n, sample_outputs
 
 
 def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
@@ -231,12 +211,9 @@ def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     results = []
 
-    for batch, logits_noisy, logits_clean, t_vals, xt_idx in sample_outputs:
+    for batch, logits_noisy, t_vals, xt_idx in sample_outputs:
         pred_noisy = tokenizer.batch_decode(
             torch.argmax(logits_noisy, dim=-1), skip_special_tokens=True
-        )
-        pred_clean = tokenizer.batch_decode(
-            torch.argmax(logits_clean, dim=-1), skip_special_tokens=True
         )
         original = tokenizer.batch_decode(
             batch["x_input_ids"], skip_special_tokens=True
@@ -254,7 +231,6 @@ def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
                     "xt_target": xt_target[i],
                     "xt_index": xt_idx[i].item(),
                     "recon_noisy": pred_noisy[i],
-                    "recon_clean": pred_clean[i],
                     "t": t_vals[i].item(),
                 }
             )
@@ -387,7 +363,6 @@ def main():
                 "epochs": EPOCHS,
                 "batch_size": BATCH_SIZE,
                 "learning_rate": LEARNING_RATE,
-                "lambda_clean": LAMBDA_CLEAN,
                 "gpsi_n_blocks": GPSI_N_BLOCKS,
                 "gpsi_n_heads": GPSI_N_HEADS,
                 "gpsi_d_ff": GPSI_D_FF,
@@ -400,7 +375,7 @@ def main():
     print(f"\n{'-'*60}")
     print("STARTING PHASE 3 (P2) TRAINING")
     print(f"  Epochs={EPOCHS}  Batch={BATCH_SIZE}  LR={LEARNING_RATE}")
-    print(f"  Lambda_clean={LAMBDA_CLEAN}  G_psi blocks={GPSI_N_BLOCKS}")
+    print(f"  G_psi blocks={GPSI_N_BLOCKS}")
     print(f"  T={T_DIFFUSION}  Schedule={NOISE_SCHEDULE}")
     print(f"{'-'*60}\n")
 
@@ -410,7 +385,7 @@ def main():
     for epoch in range(EPOCHS):
         eta_tracker.start_epoch()
 
-        train_loss, train_recon, train_clean = train_epoch(
+        train_loss = train_epoch(
             p0_model, denoiser, noise_schedule, train_loader, optimizer, device,
         )
 
@@ -421,8 +396,6 @@ def main():
             wandb.log(
                 {
                     "train/loss": train_loss,
-                    "train/loss_recon": train_recon,
-                    "train/loss_clean": train_clean,
                     **eta_tracker.wandb_metrics(epoch_elapsed, eta_seconds),
                 },
                 step=epoch + 1,
@@ -430,13 +403,12 @@ def main():
 
         # Validate every VAL_INTERVAL epochs and on the last epoch
         if (epoch + 1) % VAL_INTERVAL == 0 or (epoch + 1) == EPOCHS:
-            val_loss, val_recon, val_clean, sample_outputs = validate_epoch(
+            val_loss, sample_outputs = validate_epoch(
                 p0_model, denoiser, noise_schedule, val_loader, device,
             )
 
             print(
-                f"Epoch {epoch+1} | Train: {train_loss:.4f} | Val: {val_loss:.4f} "
-                f"(recon={val_recon:.4f} clean={val_clean:.4f}) | ETA: {eta_str}",
+                f"Epoch {epoch+1} | Train: {train_loss:.4f} | Val: {val_loss:.4f} ",
                 flush=True,
             )
             print("-" * 30, flush=True)
@@ -445,8 +417,6 @@ def main():
                 wandb.log(
                     {
                         "val/loss": val_loss,
-                        "val/loss_recon": val_recon,
-                        "val/loss_clean": val_clean,
                     },
                     step=epoch + 1,
                 )
@@ -456,12 +426,9 @@ def main():
 
                 # Log a sample table to W&B (first batch only)
                 if use_wandb:
-                    batch0, logits_n, logits_c, t0, xi0 = sample_outputs[0]
+                    batch0, logits_n, t0, xi0 = sample_outputs[0]
                     pred_n = tokenizer.batch_decode(
                         torch.argmax(logits_n, dim=-1), skip_special_tokens=True
-                    )
-                    pred_c = tokenizer.batch_decode(
-                        torch.argmax(logits_c, dim=-1), skip_special_tokens=True
                     )
                     orig = tokenizer.batch_decode(
                         batch0["x_input_ids"], skip_special_tokens=True
@@ -472,10 +439,10 @@ def main():
                         skip_special_tokens=True,
                     )
                     table = wandb.Table(
-                        columns=["original", "xt_target", "recon_noisy", "recon_clean", "t", "xt_idx"]
+                        columns=["original", "xt_target", "recon_noisy", "t", "xt_idx"]
                     )
-                    for o, xt, pn, pc, ti, xi in zip(orig, xt_tgt, pred_n, pred_c, t0, xi0):
-                        table.add_data(o, xt, pn, pc, ti.item(), xi.item())
+                    for o, xt, pn, ti, xi in zip(orig, xt_tgt, pred_n, t0, xi0):
+                        table.add_data(o, xt, pn, ti.item(), xi.item())
                     wandb.log({"val/samples": table}, step=epoch + 1)
 
             # Save best model
