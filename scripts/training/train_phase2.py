@@ -25,7 +25,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from utils.training_utils import ETATracker
+from utils.training_utils import build_p0_model, select_xt_labels, log_sample_outputs, save_checkpoint, ETATracker
 from tqdm import tqdm
 from dataloader.dataloader_augmentated import MSRAugmentedDataset
 from models.encoder_prep.encoder import TextEncoder
@@ -56,29 +56,6 @@ from train_phase2_config import (
 )
 
 
-# Helpers
-
-def build_p0_model(device):
-    """Reconstruct the P0 ForgettingModel architecture (needed to load state dict)."""
-    encoder = TextEncoder()
-    slot_pool = SlotPooling(hidden_dim=encoder.hidden_dim_size, num_slots=L_SLOTS)
-    u_head = UHead(hidden_dim=encoder.hidden_dim_size, output_dim=U_DIM)
-    v_head = VHead(hidden_dim=encoder.hidden_dim_size)
-    decoder_x = DecoderX()
-    g_psi = SemanticProjectionModule(config=G_psi_config,no_use_u=True,no_use_vt=True)
-
-    model = ForgettingModel(
-        encoder=encoder,
-        slot_pooling=slot_pool,
-        u_head=u_head,
-        v_head=v_head,
-        decoder_x=decoder_x,
-        g_psi=g_psi,
-    )
-    model.to(device)
-    return model
-
-
 def load_denoiser(denoiser_checkpoint, device):
     """Load a trained denoiser checkpoint and freeze it for Phase 3."""
     checkpoint = torch.load(denoiser_checkpoint, map_location=device)
@@ -104,24 +81,6 @@ def load_denoiser(denoiser_checkpoint, device):
 
     print(f"  Loaded denoiser from {denoiser_checkpoint} (epoch {checkpoint.get('epoch', '?')})")
     return denoiser
-
-
-def select_xt_labels(batch, t, device):
-    """Pick the right degraded xt label for each sample based on timestep.
-
-    Bucket mapping: index = min(t // XT_BUCKET_SIZE, xt_count - 1)
-    Variable-length handling: xt lists can be 1–10 items long.
-    If a sample has only 3 items and t maps to index 5, it clamps
-    to the last available item (index 2).
-    """
-    xt_input_ids = batch["xt_input_ids"].to(device)   # [B, max_xt_items, seq_len]
-    xt_count = batch["xt_count"].to(device)            # [B]
-    B = t.shape[0]
-
-    raw_index = t // XT_BUCKET_SIZE                           # [B]
-    xt_index = torch.min(raw_index, xt_count - 1)             # clamp per sample
-    labels = xt_input_ids[torch.arange(B, device=device), xt_index]  # [B, seq_len]
-    return labels, xt_index
 
 
 def train_epoch(p0_model, denoiser, noise_schedule, dataloader, optimizer, device):
@@ -150,7 +109,7 @@ def train_epoch(p0_model, denoiser, noise_schedule, dataloader, optimizer, devic
             eps_hat = denoiser(vt, t, u)
             v_hat_0 = one_step_estimate(vt, eps_hat, t, noise_schedule)
 
-        labels_noisy, _ = select_xt_labels(batch, t, device)   # [B, seq_len]
+        labels_noisy, _ = select_xt_labels(batch, t, device, XT_BUCKET_SIZE)   # [B, seq_len]
         vt_tilde = p0_model.g_psi(v_hat_0=v_hat_0, t=t, v_t=vt, u=u)    # [B, L, d]
         slot_mask = torch.ones(batch_size, L_SLOTS, device=device)
         loss_recon, logits = p0_model.decoder_x(vt_tilde, slot_mask, labels_noisy)
@@ -191,7 +150,7 @@ def validate_epoch(p0_model, denoiser, noise_schedule, dataloader, device):
         vt, _ = forward_diffusion(v0, t, noise_schedule)
         eps_hat = denoiser(vt, t, u)
         v_hat_0 = one_step_estimate(vt, eps_hat, t, noise_schedule)
-        labels_noisy, xt_index = select_xt_labels(batch, t, device)
+        labels_noisy, xt_index = select_xt_labels(batch, t, device, XT_BUCKET_SIZE)   # [B, seq_len]
         # Noisy reconstruction
         vt_tilde = p0_model.g_psi(v_hat_0=v_hat_0, t=t, v_t=vt, u=u)
         slot_mask = torch.ones(batch_size, L_SLOTS, device=device)
@@ -204,56 +163,6 @@ def validate_epoch(p0_model, denoiser, noise_schedule, dataloader, device):
 
     n = len(dataloader)
     return total_loss / n, sample_outputs
-
-
-def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
-    """Decode and save predictions for all validation batches."""
-    os.makedirs(output_dir, exist_ok=True)
-    results = []
-
-    for batch, logits_noisy, t_vals, xt_idx in sample_outputs:
-        pred_noisy = tokenizer.batch_decode(
-            torch.argmax(logits_noisy, dim=-1), skip_special_tokens=True
-        )
-        original = tokenizer.batch_decode(
-            batch["x_input_ids"], skip_special_tokens=True
-        )
-        # Decode the xt target that was used as the noisy label
-        xt_all = batch["xt_input_ids"]  # [batch_size, max_xt_items, seq_len]
-        batch_size = xt_all.shape[0]
-        xt_target_ids = xt_all[torch.arange(batch_size), xt_idx.cpu()]
-        xt_target = tokenizer.batch_decode(xt_target_ids, skip_special_tokens=True)
-
-        for i in range(len(original)):
-            results.append(
-                {
-                    "original": original[i],
-                    "xt_target": xt_target[i],
-                    "xt_index": xt_idx[i].item(),
-                    "recon_noisy": pred_noisy[i],
-                    "t": t_vals[i].item(),
-                }
-            )
-
-    out_path = os.path.join(output_dir, f"epoch_{epoch + 1}_samples.json")
-    with open(out_path, "w") as f:
-        json.dump(results, f, indent=4)
-
-
-def save_checkpoint(g_psi, decoder, optimizer, epoch, train_loss, val_loss, path):
-    """Save Phase 3 checkpoint (G_psi + fine-tuned decoder)."""
-    torch.save(
-        {
-            "epoch": epoch,
-            "g_psi_state_dict": g_psi.state_dict(),
-            "decoder_state_dict": decoder.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "train_loss": train_loss,
-            "val_loss": val_loss,
-        },
-        path,
-    )
-
 
 
 def main():
@@ -302,7 +211,7 @@ def main():
 
     # Load P0 model
     print("\nLoading P0 checkpoint...")
-    p0_model = build_p0_model(device)
+    p0_model = build_p0_model(device, L_SLOTS, U_DIM)
     checkpoint = torch.load(args.p0_checkpoint, map_location=device)
     p0_model.load_state_dict(checkpoint["model_state_dict"])
     print(f"  Loaded from {args.p0_checkpoint} (epoch {checkpoint.get('epoch', '?')})")
