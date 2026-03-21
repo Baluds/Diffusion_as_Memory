@@ -152,3 +152,32 @@ def save_checkpoint(g_psi, decoder, optimizer, epoch, train_loss, val_loss, path
         },
         path,
     )
+    
+
+def save_denoiser_checkpoint(denoiser, optimizer, epoch, train_loss, val_loss, path):
+    """Save Denoiser"""
+    torch.save(
+        {
+            "epoch": epoch,
+            "denoiser_state_dict": denoiser.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+        },
+        path,
+    )    
+
+
+def save_decoder_gpsi_checkpoint(g_psi, decoder, optimizer, epoch, train_loss, val_loss, path):
+    """Save Decoder and G_psi"""
+    torch.save(
+        {
+            "epoch": epoch,
+            "decoder_state_dict": decoder.state_dict(),
+            "g_psi_state_dict": g_psi.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+        },
+        path,
+    )    

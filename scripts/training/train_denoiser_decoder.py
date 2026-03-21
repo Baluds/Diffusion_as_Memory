@@ -12,13 +12,13 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from models.denoiser_module.config import DenoiserConfig
-from utils.training_utils import build_p0_model, select_xt_labels, log_sample_outputs, save_checkpoint, ETATracker
+from utils.training_utils import build_p0_model, select_xt_labels, log_sample_outputs, save_denoiser_checkpoint, save_decoder_gpsi_checkpoint, ETATracker
 from dataloader.dataloader_augmentated import MSRAugmentedDataset
 from models.denoiser_module.denoiser import forward_diffusion, one_step_estimate, Denoiser, NoiseSchedule
 
 # Training Hyperparameters
 BATCH_SIZE = 10
-NUM_EPOCHS = 200
+NUM_EPOCHS = 500
 LEARNING_RATE = 5e-5
 L_SLOTS = 8
 D_MODEL = 512
@@ -187,14 +187,22 @@ def train(
                 log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir)
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                save_checkpoint(
+                save_decoder_gpsi_checkpoint(
                     p0_model.g_psi,
                     p0_model.decoder_x,
                     optimizer,
                     epoch + 1,
                     train_loss,
                     val_loss,
-                    os.path.join(checkpoint_dir, "best_model.pt"),
+                    os.path.join(checkpoint_dir, "best_decoder_gpsi_model.pt"),
+                )
+                save_denoiser_checkpoint(
+                    denoiser,
+                    optimizer,
+                    epoch + 1,
+                    train_loss,
+                    val_loss,
+                    os.path.join(checkpoint_dir, "best_denoiser_model.pt"),
                 )
                 print(
                     f"  New best model saved (val_loss={val_loss:.4f})", flush=True
