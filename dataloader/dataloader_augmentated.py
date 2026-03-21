@@ -83,6 +83,7 @@ class MSRAugmentedDataset(Dataset):
             xt_input_ids[i] = enc_xt["input_ids"].squeeze(0)
 
         return{
+            "x_text": x,
             "x_input_ids": x_input_ids,
             "x_attention": x_attention,
             "xpos_input_ids": x_input_ids,

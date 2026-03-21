@@ -98,3 +98,10 @@ class ForgettingModel(nn.Module):
         v0 = self.v_head(outputs)   # [B, 8, 512]
 
         return u, v0
+    
+    @torch.no_grad()
+    def decode_latents(self, v0, attention_mask, max_new_tokens=64, num_beams=4):
+        """
+        Decode latent for inference.
+        """
+        return self.decoder_x.generate(v0, attention_mask)
