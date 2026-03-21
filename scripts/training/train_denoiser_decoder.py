@@ -142,16 +142,6 @@ def validate_epoch(p0_model, denoiser, noise_scheduler, val_loader, device):
     return total_loss / n, sample_outputs
 
 
-def wandb_log(key, message, eta_tracker, epoch_elapsed, eta_seconds, epoch):
-    wandb.log(
-        {
-            key: message,
-            **eta_tracker.wandb_metrics(epoch_elapsed, eta_seconds),
-        },
-        step=epoch + 1,
-    )
-
-
 def train(
     train_loader, 
     val_loader, 
