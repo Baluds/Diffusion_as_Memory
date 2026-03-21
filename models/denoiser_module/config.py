@@ -22,8 +22,8 @@ class DenoiserConfig:
     
     # Training
     learning_rate = 1e-4
-    batch_size = 32
-    num_epochs = 100
+    batch_size = 16
+    num_epochs = 1000
     warmup_steps = 1000 #not used
     weight_decay = 1e-5
     
