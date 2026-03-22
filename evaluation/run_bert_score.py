@@ -26,20 +26,20 @@ def compute_bert_score(src_list, output_list):
         json.dump(results, f, indent=4)
 
 
-def get_src_and_output():
-    with open("output/p0/inference/test_preds.json", "r") as f:
+def get_src_and_output(file_path, ground_label_key="x_true", prediction_key="x_pred"):
+    with open(file_path, "r") as f:
         data = json.load(f)
     src_list = []
     output_list = []
     for item in data:
-        candidate = item["x_true"]
+        candidate = item[ground_label_key]
         src_list.append(candidate)
-        reference = item["x_pred"]
+        reference = item[prediction_key]
         output_list.append(reference)
     
     return src_list, output_list
 
 
 if __name__ == "__main__":
-    src_list, output_list = get_src_and_output()
+    src_list, output_list = get_src_and_output("output/p0/inference/test_preds.json", ground_label_key="x_true", prediction_key="x_pred")
     compute_bert_score(src_list, output_list)
