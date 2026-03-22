@@ -20,6 +20,7 @@ import json
 import os
 import argparse
 import sys
+from typing import Dict, List
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
@@ -38,6 +39,7 @@ from models.g_psi_module.semantic_projection import SemanticProjectionModule
 from models.denoiser_module.config import DenoiserConfig
 from models.denoiser_module.denoiser import Denoiser, NoiseSchedule, forward_diffusion, one_step_estimate
 from models.g_psi_module.g_psi_config import G_psi_config
+from evaluation.run_uni_eval import evaluate_factual_consistency_return
 from train_phase2_config import (
     BATCH_SIZE,
     EPOCHS,
@@ -54,6 +56,53 @@ from train_phase2_config import (
     D_MODEL,
     U_DIM,
 )
+
+
+def _flatten_val_predictions(sample_outputs, tokenizer):
+    """Convert validation outputs into plain text lists for metric eval."""
+    src_list: List[str] = []
+    pred_list: List[str] = []
+
+    for batch, logits_noisy, _, _ in sample_outputs:
+        pred_noisy = tokenizer.batch_decode(
+            torch.argmax(logits_noisy, dim=-1), skip_special_tokens=True
+        )
+        original = tokenizer.batch_decode(
+            batch["x_input_ids"], skip_special_tokens=True
+        )
+        src_list.extend(original)
+        pred_list.extend(pred_noisy)
+
+    return src_list, pred_list
+
+
+def evaluate_best_epoch(sample_outputs, tokenizer) -> Dict[str, float]:
+    """Compute BERTScore and UniEval(factual consistency) on validation predictions."""
+    src_list, pred_list = _flatten_val_predictions(sample_outputs, tokenizer)
+    metrics: Dict[str, float] = {}
+
+    # BERTScore
+    try:
+        from bert_score import score as bert_score_fn
+
+        p, r, f1 = bert_score_fn(pred_list, src_list, lang="en", verbose=False)
+        metrics["bertscore/precision_mean"] = p.mean().item()
+        metrics["bertscore/recall_mean"] = r.mean().item()
+        metrics["bertscore/f1_mean"] = f1.mean().item()
+    except Exception as exc:
+        print(f"BERTScore failed: {exc}", flush=True)
+
+    # UniEval (factual consistency)
+    try:
+        unieval_results = evaluate_factual_consistency_return(
+            src_list=src_list,
+            output_list=pred_list
+        )
+        metrics["unieval/consistency_mean"] = unieval_results["mean_consistency"]
+    except Exception as exc:
+        print(f"UniEval failed: {exc}", flush=True)
+
+    return metrics
 
 
 def load_denoiser(denoiser_checkpoint, device):
@@ -369,9 +418,28 @@ def main():
                 print(
                     f"  New best model saved (val_loss={val_loss:.4f})", flush=True
                 )
+
+                best_eval_metrics = {}
+                if sample_outputs:
+                    best_eval_metrics = evaluate_best_epoch(
+                        sample_outputs=sample_outputs,
+                        tokenizer=tokenizer,
+                    )
+                    if best_eval_metrics:
+                        metrics_path = os.path.join(
+                            output_dir, f"epoch_{epoch + 1}_best_eval_metrics.json"
+                        )
+                        with open(metrics_path, "w") as f:
+                            json.dump(best_eval_metrics, f, indent=2)
+                        print(f"  Saved best-epoch eval metrics to {metrics_path}", flush=True)
+
                 if use_wandb:
                     wandb.run.summary["best_val_loss"] = best_val_loss
                     wandb.run.summary["best_epoch"] = epoch + 1
+                    if best_eval_metrics:
+                        wandb.log(best_eval_metrics, step=epoch + 1)
+                        for k, v in best_eval_metrics.items():
+                            wandb.run.summary[f"best_{k}"] = v
         else:
             print(
                 f"Epoch {epoch+1} | Train: {train_loss:.4f} | ETA: {eta_str}",

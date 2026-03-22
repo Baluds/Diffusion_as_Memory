@@ -29,7 +29,7 @@ echo ""
 python scripts/training/train_on_latents.py \
     --train-latents data/latents/mod_g_psi/train_latents.pt \
     --val-latents data/latents/mod_g_psi/val_latents.pt \
-    --checkpoint-dir checkpoints/p1/temp \
+    --checkpoint-dir checkpoints/p1/epoch_inc \
     --wandb-project diffusion-as-memory \
     --wandb-run-name p1-training-run_$(date +%Y%m%d_%H%M%S)
 
