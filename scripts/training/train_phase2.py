@@ -21,6 +21,7 @@ import os
 import argparse
 import sys
 from typing import Dict, List
+from bert_score import score as bert_score_fn
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
@@ -82,15 +83,19 @@ def evaluate_best_epoch(sample_outputs, tokenizer) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
 
     # BERTScore
-    try:
-        from bert_score import score as bert_score_fn
-
-        p, r, f1 = bert_score_fn(pred_list, src_list, lang="en", verbose=False)
-        metrics["bertscore/precision_mean"] = p.mean().item()
-        metrics["bertscore/recall_mean"] = r.mean().item()
-        metrics["bertscore/f1_mean"] = f1.mean().item()
-    except Exception as exc:
-        print(f"BERTScore failed: {exc}", flush=True)
+    model_type_used = "roberta-base"
+    p, r, f1 = bert_score_fn(
+    pred_list,
+    src_list,
+    lang="en",
+    verbose=False,
+    model_type=model_type_used,
+    use_fast_tokenizer=True,
+    )
+    metrics["bertscore/precision_mean"] = p.mean().item()
+    metrics["bertscore/recall_mean"] = r.mean().item()
+    metrics["bertscore/f1_mean"] = f1.mean().item()
+    metrics["bertscore/model_used"] = model_type_used
 
     # UniEval (factual consistency)
     try:
@@ -437,9 +442,9 @@ def main():
                     wandb.run.summary["best_val_loss"] = best_val_loss
                     wandb.run.summary["best_epoch"] = epoch + 1
                     if best_eval_metrics:
-                        wandb.log(best_eval_metrics, step=epoch + 1)
                         for k, v in best_eval_metrics.items():
-                            wandb.run.summary[f"best_{k}"] = v
+                            if k.startswith("bertscore/"):
+                                wandb.run.summary[f"best_{k}"] = v
         else:
             print(
                 f"Epoch {epoch+1} | Train: {train_loss:.4f} | ETA: {eta_str}",
