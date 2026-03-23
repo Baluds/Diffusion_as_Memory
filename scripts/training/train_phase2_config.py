@@ -5,7 +5,7 @@ Hyperparameters for G_psi semantic projection module + decoder fine-tuning.
 
 # Training Hyperparameters
 BATCH_SIZE = 10
-EPOCHS = 200
+EPOCHS = 300
 LEARNING_RATE = 5e-5
 LAMBDA_CLEAN = 0.5  # weight for clean (t=0) reconstruction loss
 VAL_INTERVAL = 10   # validate every N epochs
