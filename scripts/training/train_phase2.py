@@ -445,6 +445,8 @@ def main():
                         for k, v in best_eval_metrics.items():
                             if k.startswith("bertscore/"):
                                 wandb.run.summary[f"best_{k}"] = v
+                            if k.startswith("unieval/"):
+                                wandb.run.summary[f"best_{k}"] = v
         else:
             print(
                 f"Epoch {epoch+1} | Train: {train_loss:.4f} | ETA: {eta_str}",
