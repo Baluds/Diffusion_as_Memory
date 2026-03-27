@@ -53,6 +53,7 @@ def load_denoiser_from_checkpoint(checkpoint_path, device):
         config.schedule = saved_cfg.get("schedule", config.schedule)
 
     denoiser = Denoiser(config).to(device)
+    # denoiser.load_state_dict(checkpoint["denoiser_state_dict"])
     denoiser.load_state_dict(checkpoint["model_state_dict"])
     denoiser.eval()
 
@@ -64,3 +65,32 @@ def load_denoiser_from_checkpoint(checkpoint_path, device):
     print(f"  Config: L={config.L}, d={config.d}, T={config.T}, blocks={config.N_blocks}")
     return denoiser, config, metadata
 
+def load_p0_model_with_gpsi_decoder_from_checkpoint(p0_path, decoder_path, device, l_slots, u_dim):
+    """
+    Reconstruct the G_psi decoder architecture (needed to load state dict).
+    
+    :p0_path: path to P0 model checkpoint file
+    :decoder_path: path to G_psi decoder checkpoint file
+    :param: device: "cuda" or "cpu"
+    :param: l_slots: number of slots
+    :param: d_model: dimension of model
+    """
+    model, p0_metadata = load_p0_model_from_checkpoint(p0_path, device, l_slots, u_dim)
+    decoder_checkpoint = torch.load(decoder_path, map_location=device)
+    
+    if "g_psi_state_dict" not in decoder_checkpoint or "decoder_state_dict" not in decoder_checkpoint:
+        raise ValueError("Unsupported checkpoint format. Expected dict with model weights.")
+
+    model.g_psi.load_state_dict(decoder_checkpoint["g_psi_state_dict"])
+    model.decoder_x.load_state_dict(decoder_checkpoint["decoder_state_dict"])
+    model.eval()
+    
+    metadata = {
+        "decoder_epoch": decoder_checkpoint.get("epoch"),
+        "decoder_train_loss": decoder_checkpoint.get("train_loss"),
+        "decoder_val_loss": decoder_checkpoint.get("val_loss"),
+    }
+    
+    final_metadata = p0_metadata | metadata
+    
+    return model, final_metadata

@@ -159,7 +159,7 @@ def save_denoiser_checkpoint(denoiser, optimizer, epoch, train_loss, val_loss, p
     torch.save(
         {
             "epoch": epoch,
-            "denoiser_state_dict": denoiser.state_dict(),
+            "model_state_dict": denoiser.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "train_loss": train_loss,
             "val_loss": val_loss,

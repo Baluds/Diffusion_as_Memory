@@ -7,7 +7,7 @@ from transformers import T5Tokenizer
 from tqdm import tqdm
 import json
 
-from utils.inference_utils import load_denoiser_from_checkpoint, load_p0_model_with_gpsi_decoder_from_checkpoint
+from utils.inference_utils import load_denoiser_from_checkpoint, load_p0_model_from_checkpoint
 from models.denoiser_module.denoiser import NoiseSchedule, forward_diffusion, one_step_estimate
 from dataloader.dataloader_augmentated import MSRAugmentedDataset
 
@@ -55,9 +55,8 @@ def run_inference(p0_model, denoiser_model, noise_schedule, dataloader, tokenize
                 "original_text": original_texts[sample_idx],
                 "decoded_text": decoded_texts[sample_idx],
             })
-        break
             
-    output_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/output/inference_results.json"
+    output_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/output/inference_results_phase2_full.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 
@@ -88,14 +87,13 @@ def main():
     tokenizer = T5Tokenizer.from_pretrained("t5-small")
     dataset_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/Diffusion_as_Memory/data/final/test.json"
     dataset = MSRAugmentedDataset(dataset_path, tokenizer)
-    dataloader = DataLoader(dataset, batch_size=4, shuffle=False)
+    dataloader = DataLoader(dataset, batch_size=10, shuffle=False)
     print(f"Loaded {len(dataset)} samples, {len(dataloader)} batches")
     
     p0_model_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/checkpoints/p0/mod_g_psi/best_model.pt"
-    denoiser_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/checkpoints/denoiser_decoder_500/best_denoiser_model.pt"
-    gpsi_decoder_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/checkpoints/denoiser_decoder_500/best_decoder_gpsi_model.pt"
+    denoiser_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/checkpoints/p1/mod_g_psi/best_model.pt"
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    p0_model, _ = load_p0_model_with_gpsi_decoder_from_checkpoint(p0_model_path, gpsi_decoder_path, device, L_SLOTS, U_DIM)
+    p0_model, _ = load_p0_model_from_checkpoint(p0_model_path, device, L_SLOTS, U_DIM)
     print(f"Loaded P0 model from {p0_model_path}")
     denoiser_model, config, _ = load_denoiser_from_checkpoint(denoiser_path, device)
     print(f"Loaded denoiser model from {denoiser_path}")
