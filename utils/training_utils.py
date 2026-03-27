@@ -137,7 +137,35 @@ def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
     out_path = os.path.join(output_dir, f"epoch_{epoch + 1}_samples.json")
     with open(out_path, "w") as f:
         json.dump(results, f, indent=4)
-        
+
+
+def convert_tokens_to_text_and_log(sample_outputs, tokenizer, epoch, output_dir):
+    """Utility to decode token IDs to text."""
+    results = []
+
+    for batch, logits, t in sample_outputs:
+        pred_texts = tokenizer.batch_decode(
+            torch.argmax(logits, dim=-1), skip_special_tokens=True
+        )
+        x_text = batch["x_text"]
+        xt_text = batch["xt_text"]
+        xprev_text = batch["xprev_text"]
+        t = batch["t"]
+        for i in range(len(pred_texts)):
+            results.append(
+                {
+                    "x": x_text[i],
+                    "xt": xt_text[i],
+                    "xprev": xprev_text[i],
+                    "pred_"
+                    "recon": pred_texts[i],
+                    "t": t[i].item(),
+                }
+            )
+    
+    out_path = os.path.join(output_dir, f"epoch_{epoch + 1}_samples.json")
+    with open(out_path, "w") as f:
+        json.dump(results, f, indent=4)
         
 def save_checkpoint(g_psi, decoder, optimizer, epoch, train_loss, val_loss, path):
     """Save Phase 3 checkpoint (G_psi + fine-tuned decoder)."""
@@ -181,3 +209,19 @@ def save_decoder_gpsi_checkpoint(g_psi, decoder, optimizer, epoch, train_loss, v
         },
         path,
     )    
+
+
+def save_model_checkpoint(diffusion_model, optimizer, epoch, train_loss, val_loss, path):
+    """Save Diffusion Model"""
+    torch.save(
+        {
+            "epoch": epoch,
+            "model_state_dict": diffusion_model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+        },
+        path,
+    )
+
+TEST
