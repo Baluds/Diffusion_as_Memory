@@ -105,7 +105,7 @@ def select_xt_labels(batch, t, device, xt_bucket_size):
     return labels, xt_index
 
 
-def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
+def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir, label_source="xt"):
     """Decode and save predictions for all validation batches."""
     os.makedirs(output_dir, exist_ok=True)
     results = []
@@ -117,18 +117,26 @@ def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
         original = tokenizer.batch_decode(
             batch["x_input_ids"], skip_special_tokens=True
         )
-        # Decode the xt target that was used as the noisy label
-        xt_all = batch["xt_input_ids"]  # [batch_size, max_xt_items, seq_len]
-        batch_size = xt_all.shape[0]
-        xt_target_ids = xt_all[torch.arange(batch_size), xt_idx.cpu()]
-        xt_target = tokenizer.batch_decode(xt_target_ids, skip_special_tokens=True)
+        if label_source == "x":
+            # Ablation mode: decoder target is x for all t.
+            xt_target = tokenizer.batch_decode(
+                batch["x_input_ids"], skip_special_tokens=True
+            )
+            xt_index_vals = torch.full((len(xt_target),), -1, dtype=torch.long)
+        else:
+            # Decode the xt target that was used as the noisy label.
+            xt_all = batch["xt_input_ids"]  # [batch_size, max_xt_items, seq_len]
+            batch_size = xt_all.shape[0]
+            xt_target_ids = xt_all[torch.arange(batch_size), xt_idx.cpu()]
+            xt_target = tokenizer.batch_decode(xt_target_ids, skip_special_tokens=True)
+            xt_index_vals = xt_idx.cpu()
 
         for i in range(len(original)):
             results.append(
                 {
                     "original": original[i],
                     "xt_target": xt_target[i],
-                    "xt_index": xt_idx[i].item(),
+                    "xt_index": xt_index_vals[i].item(),
                     "recon_noisy": pred_noisy[i],
                     "t": t_vals[i].item(),
                 }
