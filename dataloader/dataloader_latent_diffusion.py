@@ -3,7 +3,7 @@ import torch
 import torch.utils.data as Dataset
 import random
 
-class MSRDiffusionDataset:
+class LatentDiffusionDataset:
     def __init__(self, input_file_path, tokenizer):
         with open (input_file_path,"r") as f:
             self.data = json.load(f)
