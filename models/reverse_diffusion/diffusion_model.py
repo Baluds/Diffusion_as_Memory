@@ -242,15 +242,12 @@ class DiffusionModel(nn.Module):
         """
 
         B, L, D = vt.shape
+        t = t.to(vt.device)
+        if not torch.is_tensor(t):
+            t = torch.tensor(t, device=vt.device)
 
-        h = self.lat_proj(vt)  # [B, L, H]
-
-        t_emb = self.time_embed(t)                 # [B, H]
-        # why do we need to project U??
-        g_emb = self.gist_proj(u)                  # [B, H]
-        cond = (t_emb + g_emb).unsqueeze(1)        # [B, 1, H]
-
-        h = h + cond
-        h = self.transformer(h)
-        v_prev_hat = self.out_proj(h)              # [B, L, D]
+        t_emb = self.timestep_emb(t)                 # [B, H]
+        for block in self.transformer_blocks:
+            h = block(vt, u, t_emb)                      # [B, L, D]
+        v_prev_hat = self.output_projection(self.output_norm(h))              # [B, L, D]
         return v_prev_hat
