@@ -1,9 +1,6 @@
-import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from typing import Tuple, Optional, List
-from models.denoiser_module.denoiser import NoiseSchedule, TimestepEmbedding, AdaLN, MultiHeadAttention
+from models.denoiser_module.denoiser import TimestepEmbedding, AdaLN, MultiHeadAttention
 
 
 class TransformerBlock(nn.Module):
@@ -65,7 +62,7 @@ class TransformerBlock(nn.Module):
         return x
 
 
-class DiffusionModel(nn.Module):
+class LatentDiffusionModel(nn.Module):
     def __init__(self, d: int, num_slots: int, u_dim: int, hidden_dim: int):
         super().__init__()
         self.d = d
@@ -94,7 +91,7 @@ class DiffusionModel(nn.Module):
     def forward(self, vt: torch.Tensor, u: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         """
         This takes in degraded latent, gist and timestep.
-        It predicts the latednt at previous timestep.
+        It predicts the latent at previous timestep.
         """
 
         B, L, D = vt.shape
