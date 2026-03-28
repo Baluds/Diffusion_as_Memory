@@ -143,18 +143,18 @@ def convert_tokens_to_text_and_log(sample_outputs, tokenizer, epoch, output_dir)
     """Utility to decode token IDs to text."""
     results = []
 
-    for batch, logits, t in sample_outputs:
+    for batch, logits in sample_outputs:
         pred_texts = tokenizer.batch_decode(
             torch.argmax(logits, dim=-1), skip_special_tokens=True
         )
-        x_text = batch["x_text"]
+        x0_text = batch["x0_text"]
         xt_text = batch["xt_text"]
         xprev_text = batch["xprev_text"]
         t = batch["t"]
         for i in range(len(pred_texts)):
             results.append(
                 {
-                    "x": x_text[i],
+                    "x0": x0_text[i],
                     "xt": xt_text[i],
                     "xprev": xprev_text[i],
                     "pred_"
@@ -223,5 +223,3 @@ def save_model_checkpoint(diffusion_model, optimizer, epoch, train_loss, val_los
         },
         path,
     )
-
-TEST

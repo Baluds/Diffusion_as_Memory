@@ -2,10 +2,17 @@ import argparse
 import torch
 import torch.nn as nn
 import os
+import sys
 from torch.utils.data import DataLoader
+from transformers import T5Tokenizer
+from tqdm import tqdm
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 from dataloader.dataloader_diffusion import MSRDiffusionDataset
-from utils.training_utils import build_p0_model, set_trainable_params, convert_tokens_to_text_and_log, save_decoder_gpsi_checkpoint, save_model_checkpoint
+from utils.training_utils import build_p0_model, convert_tokens_to_text_and_log, save_decoder_gpsi_checkpoint, save_model_checkpoint
 from models.reverse_diffusion.diffusion_model import DiffusionModel
 
 # CONSTANTS
@@ -19,6 +26,25 @@ T_DIFFUSION = 1000
 XT_BUCKET_SIZE = T_DIFFUSION // 10
 VAL_INTERVAL = 10
 
+
+def set_trainable_params(p0_model):
+    # Freeze everything in P0 model
+    for param in p0_model.parameters():
+        param.requires_grad = False
+
+    # Unfreeze decoder for fine-tuning
+    for param in p0_model.decoder_x.parameters():
+        param.requires_grad = True
+    
+    # Unfreeze G_psi 
+    for param in p0_model.g_psi.parameters():
+        param.requires_grad = True
+
+    trainable_params = sum(p.numel() for p in p0_model.g_psi.parameters()) + sum(
+        p.numel() for p in p0_model.decoder_x.parameters()
+    )
+    
+    return trainable_params
 
 def train_epoch(p0_model, diffusion_model, train_loader, optimizer, device):
     """
@@ -36,10 +62,17 @@ def train_epoch(p0_model, diffusion_model, train_loader, optimizer, device):
     diffusion_model.train()
 
     mse_criterion = nn.MSELoss()
+    
+    print("Starting training epoch...")
 
     total_loss = 0.0
-    for batch_idx, batch in enumerate(train_loader, description="Training", leave=False):
-        batch = {k: v.to(device) for k, v in batch.items()}
+    pbar = tqdm(train_loader, desc="Training", leave=False)
+    for batch_idx, batch in enumerate(pbar):
+        batch = {
+            k: (v.to(device) if torch.is_tensor(v) else v)
+            for k, v in batch.items()
+        }
+
         optimizer.zero_grad()
         batch_size = batch["x0_input_ids"].shape[0]
 
@@ -50,16 +83,16 @@ def train_epoch(p0_model, diffusion_model, train_loader, optimizer, device):
             _, vprev = p0_model.encode_xt_latents(batch["xprev_input_ids"], batch["xprev_attention"])
 
         # Forward pass through diffusion model
-        vprev_hat = diffusion_model(vt, batch["t"], u)
+        vprev_hat = diffusion_model(vt, u, batch["t"])
          
         latent_loss = mse_criterion(vprev_hat, vprev)
 
         # run decoder and gpsi, compute their loss
         vprev_hat = p0_model.g_psi(vprev_hat, batch["t"], vt, u)
         slot_mask = torch.ones(batch_size, L_SLOTS, device=device)
-        decoder_loss, _ = p0_model.decoder_x(vprev_hat, slot_mask, batch["xprev_text"])
+        decoder_loss, _ = p0_model.decoder_x(vprev_hat, slot_mask, batch["xprev_input_ids"])
 
-        loss = 0.5 * latent_loss + 0.5 * decoder_loss
+        loss = latent_loss + decoder_loss
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
@@ -77,8 +110,13 @@ def validate_epoch(p0_model, diffusion_model, val_loader, device):
     total_loss = 0.0
     sample_outputs = []
 
-    for batch_idx, batch in enumerate(val_loader, description="Validation", leave=False):
-        batch = {k: v.to(device) for k, v in batch.items()}
+    pbar = tqdm(val_loader, desc="Validation", leave=False)
+    for batch_idx, batch in enumerate(pbar):
+        batch = {
+            k: (v.to(device) if torch.is_tensor(v) else v)
+            for k, v in batch.items()
+        }
+
         batch_size = batch["x0_input_ids"].shape[0]
 
         with torch.no_grad():
@@ -86,23 +124,23 @@ def validate_epoch(p0_model, diffusion_model, val_loader, device):
             _, vt = p0_model.encode_xt_latents(batch["xt_input_ids"], batch["xt_attention"])
             _, vprev = p0_model.encode_xt_latents(batch["xprev_input_ids"], batch["xprev_attention"])
 
-            vprev_hat = diffusion_model(vt, batch["t"], u)
+            vprev_hat = diffusion_model(vt, u, batch["t"])
             latent_loss = mse_criterion(vprev_hat, vprev)
 
             vprev_hat = p0_model.g_psi(vprev_hat, batch["t"], vt, u)
             slot_mask = torch.ones(batch_size, L_SLOTS, device=device)
-            decoder_loss, xprev_hat_logits = p0_model.decoder_x(vprev_hat, slot_mask, batch["xprev_text"])
+            decoder_loss, xprev_hat_logits = p0_model.decoder_x(vprev_hat, slot_mask, batch["xprev_input_ids"])
 
-            loss = 0.5 * latent_loss + 0.5 * decoder_loss
+            loss = latent_loss + decoder_loss
             total_loss += loss.item()
 
-            sample_outputs.append(batch, xprev_hat_logits, batch["t"], batch["xprev_text"])
+            sample_outputs.append((batch, xprev_hat_logits))
 
     avg_loss = total_loss / len(val_loader)
     return avg_loss, sample_outputs
 
 
-def train(p0_model, diffusion_model, train_loader, val_loader, optimizer, device, output_dir, checkpoint_dir):
+def train(p0_model, diffusion_model, tokenizer, train_loader, val_loader, optimizer, device, output_dir, checkpoint_dir):
     best_val_loss = float('inf')
 
     for epoch in range(NUM_EPOCHS):
@@ -114,7 +152,7 @@ def train(p0_model, diffusion_model, train_loader, val_loader, optimizer, device
             print(f"Epoch {epoch+1}/{NUM_EPOCHS} - Validation Loss: {val_loss:.4f}")
 
             if sample_outputs:
-                convert_tokens_to_text_and_log(sample_outputs, p0_model.tokenizer, epoch, output_dir)
+                convert_tokens_to_text_and_log(sample_outputs, tokenizer, epoch, output_dir)
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
@@ -168,6 +206,8 @@ def main():
     )
 
     args = parser.parse_args()
+    
+    print("Arguments parsed successfully.")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     checkpoint_dir = "/project/pi_dagarwal_umass_edu/project_3/issinha/checkpoints/reverse_diffusion"
@@ -175,31 +215,31 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(checkpoint_dir, exist_ok=True)
 
-    train_dataset = MSRDiffusionDataset(args.train_dataset)
-    train_loader = DataLoader(train_dataset, batch_size=10, shuffle = True)
-    val_dataset = MSRDiffusionDataset(args.val_dataset)
-    val_loader = DataLoader(val_dataset, batch_size=10, shuffle = True)
+    tokenizer = T5Tokenizer.from_pretrained("t5-small")
+    train_dataset = MSRDiffusionDataset(args.train_dataset, tokenizer)
+    train_loader = DataLoader(train_dataset, batch_size=20, shuffle = True)
+    val_dataset = MSRDiffusionDataset(args.val_dataset, tokenizer)
+    val_loader = DataLoader(val_dataset, batch_size=20, shuffle = True)
 
     p0_model = build_p0_model(device, L_SLOTS, U_DIM)
     checkpoint = torch.load(args.p0_checkpoint, map_location=device)
     p0_model.load_state_dict(checkpoint["model_state_dict"])
-    p0_trainable_params = set_trainable_params(p0_model)
     print(f"  Loaded from {args.p0_checkpoint} (epoch {checkpoint.get('epoch', '?')})")
+    p0_trainable_params = set_trainable_params(p0_model)
 
     diffusion_model = DiffusionModel(D_MODEL, L_SLOTS, U_DIM, D_MODEL).to(device)
 
     train(
         p0_model,
         diffusion_model,
+        tokenizer,
         train_loader,
         val_loader,
-        torch.optim.Adam(list(p0_trainable_params) + list(diffusion_model.parameters()), lr=LEARNING_RATE),
+        torch.optim.AdamW(list(p0_model.g_psi.parameters()) + list(p0_model.decoder_x.parameters()) + list(diffusion_model.parameters()), lr=LEARNING_RATE),
         device,
         output_dir,
         checkpoint_dir,
     )
-    
-
 
 
 if __name__ == "__main__":

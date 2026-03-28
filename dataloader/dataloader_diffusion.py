@@ -44,7 +44,7 @@ class MSRDiffusionDataset:
 
 
         return{
-            "x0_inputs_ids": x0_input_ids,
+            "x0_input_ids": x0_input_ids,
             "x0_attention": x0_attention,
             "xt_input_ids": xt_input_ids,
             "xt_attention": xt_attention,
