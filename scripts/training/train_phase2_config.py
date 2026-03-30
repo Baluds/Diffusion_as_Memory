@@ -4,11 +4,15 @@ Hyperparameters for G_psi semantic projection module + decoder fine-tuning.
 """
 
 # Training Hyperparameters
-BATCH_SIZE = 10
+BATCH_SIZE = 16
 EPOCHS = 300
-LEARNING_RATE = 5e-5
+LEARNING_RATE = 1.504310261691173e-5
+WEIGHT_DECAY = 1.5955348946134e-7
+SCHEDULER = "cosine"  # choices: none, cosine, linear
+WARMUP_RATIO = 0.1
+MAX_GRAD_NORM = 2.0
 LAMBDA_CLEAN = 0.5  # weight for clean (t=0) reconstruction loss
-VAL_INTERVAL = 10   # validate every N epochs
+VAL_INTERVAL = 5   # validate every N epochs
 
 # G_psi Architecture
 GPSI_N_BLOCKS = 3   # number of AdaLN transformer blocks

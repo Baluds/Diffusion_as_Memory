@@ -15,6 +15,7 @@ Usage:
 
 import torch
 from torch.utils.data import DataLoader
+from transformers import get_cosine_schedule_with_warmup, get_linear_schedule_with_warmup
 from transformers import T5Tokenizer
 import json
 import os
@@ -45,6 +46,9 @@ from train_phase2_config import (
     BATCH_SIZE,
     EPOCHS,
     LEARNING_RATE,
+    WEIGHT_DECAY,
+    SCHEDULER,
+    WARMUP_RATIO,
     VAL_INTERVAL,
     GPSI_N_BLOCKS,
     GPSI_N_HEADS,
@@ -137,7 +141,31 @@ def load_denoiser(denoiser_checkpoint, device):
     return denoiser
 
 
-def train_epoch(p0_model, denoiser, noise_schedule, dataloader, optimizer, device):
+def _build_scheduler(optimizer, cfg, total_steps):
+    """Build optional LR scheduler from config."""
+    scheduler_name = cfg["scheduler"]
+    if scheduler_name == "none":
+        return None
+
+    warmup_steps = int(total_steps * cfg["warmup_ratio"])
+    warmup_steps = max(0, min(warmup_steps, total_steps))
+
+    if scheduler_name == "cosine":
+        return get_cosine_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=warmup_steps,
+            num_training_steps=total_steps,
+        )
+    if scheduler_name == "linear":
+        return get_linear_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=warmup_steps,
+            num_training_steps=total_steps,
+        )
+    raise ValueError(f"Unsupported scheduler: {scheduler_name}")
+
+
+def train_epoch(p0_model, denoiser, noise_schedule, dataloader, optimizer, device, scheduler=None):
     """Run one training epoch. Returns (total_loss) averages."""
     p0_model.g_psi.train()
     p0_model.decoder_x.train()
@@ -177,6 +205,8 @@ def train_epoch(p0_model, denoiser, noise_schedule, dataloader, optimizer, devic
             max_norm=1.0,
         )
         optimizer.step()
+        if scheduler is not None:
+            scheduler.step()
 
         total_loss += loss.item()
 
@@ -307,6 +337,17 @@ def main():
     optimizer = torch.optim.Adam(
         list(p0_model.g_psi.parameters()) + list(p0_model.decoder_x.parameters()),
         lr=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+    )
+
+    total_steps = max(1, len(train_loader) * EPOCHS)
+    scheduler = _build_scheduler(
+        optimizer,
+        {
+            "scheduler": SCHEDULER,
+            "warmup_ratio": WARMUP_RATIO,
+        },
+        total_steps,
     )
 
     output_dir = args.output_dir
@@ -326,18 +367,22 @@ def main():
                 "epochs": EPOCHS,
                 "batch_size": BATCH_SIZE,
                 "learning_rate": LEARNING_RATE,
+                "weight_decay": WEIGHT_DECAY,
                 "gpsi_n_blocks": GPSI_N_BLOCKS,
                 "gpsi_n_heads": GPSI_N_HEADS,
                 "gpsi_d_ff": GPSI_D_FF,
                 "T_diffusion": T_DIFFUSION,
                 "noise_schedule": NOISE_SCHEDULE,
                 "trainable_params": trainable_params,
+                "scheduler": SCHEDULER,
+                "warmup_ratio": WARMUP_RATIO,
             },
         )
 
     print(f"\n{'-'*60}")
     print("STARTING PHASE 3 (P2) TRAINING")
     print(f"  Epochs={EPOCHS}  Batch={BATCH_SIZE}  LR={LEARNING_RATE}")
+    print(f"  Scheduler={SCHEDULER}  Warmup ratio={WARMUP_RATIO}")
     print(f"  G_psi blocks={GPSI_N_BLOCKS}")
     print(f"  T={T_DIFFUSION}  Schedule={NOISE_SCHEDULE}")
     print(f"{'-'*60}\n")
@@ -349,16 +394,18 @@ def main():
         eta_tracker.start_epoch()
 
         train_loss = train_epoch(
-            p0_model, denoiser, noise_schedule, train_loader, optimizer, device,
+            p0_model, denoiser, noise_schedule, train_loader, optimizer, device, scheduler,
         )
 
         epoch_elapsed, eta_seconds, eta_str = eta_tracker.end_epoch()
+        current_lr = optimizer.param_groups[0]["lr"]
 
         # Log train metrics
         if use_wandb:
             wandb.log(
                 {
                     "train/loss": train_loss,
+                    "train/lr": current_lr,
                     **eta_tracker.wandb_metrics(epoch_elapsed, eta_seconds),
                 },
                 step=epoch + 1,

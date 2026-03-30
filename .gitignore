@@ -12,3 +12,4 @@ output/p2/
 scripts/training/train_all_phases.py
 .nltk_data/
 UniEval/
+sbatch_scripts/slurm_output/
