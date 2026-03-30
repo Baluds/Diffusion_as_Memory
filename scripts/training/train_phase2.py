@@ -49,6 +49,7 @@ from train_phase2_config import (
     WEIGHT_DECAY,
     SCHEDULER,
     WARMUP_RATIO,
+    MAX_GRAD_NORM,
     VAL_INTERVAL,
     GPSI_N_BLOCKS,
     GPSI_N_HEADS,
@@ -165,7 +166,16 @@ def _build_scheduler(optimizer, cfg, total_steps):
     raise ValueError(f"Unsupported scheduler: {scheduler_name}")
 
 
-def train_epoch(p0_model, denoiser, noise_schedule, dataloader, optimizer, device, scheduler=None):
+def train_epoch(
+    p0_model,
+    denoiser,
+    noise_schedule,
+    dataloader,
+    optimizer,
+    device,
+    scheduler=None,
+    max_grad_norm=1.0,
+):
     """Run one training epoch. Returns (total_loss) averages."""
     p0_model.g_psi.train()
     p0_model.decoder_x.train()
@@ -200,10 +210,11 @@ def train_epoch(p0_model, denoiser, noise_schedule, dataloader, optimizer, devic
         # Total loss
         loss = loss_recon
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(
-            list(p0_model.g_psi.parameters()) + list(p0_model.decoder_x.parameters()),
-            max_norm=1.0,
-        )
+        if max_grad_norm > 0:
+            torch.nn.utils.clip_grad_norm_(
+                list(p0_model.g_psi.parameters()) + list(p0_model.decoder_x.parameters()),
+                max_norm=max_grad_norm,
+            )
         optimizer.step()
         if scheduler is not None:
             scheduler.step()
@@ -376,6 +387,7 @@ def main():
                 "trainable_params": trainable_params,
                 "scheduler": SCHEDULER,
                 "warmup_ratio": WARMUP_RATIO,
+                "max_grad_norm": MAX_GRAD_NORM,
             },
         )
 
@@ -383,6 +395,7 @@ def main():
     print("STARTING PHASE 3 (P2) TRAINING")
     print(f"  Epochs={EPOCHS}  Batch={BATCH_SIZE}  LR={LEARNING_RATE}")
     print(f"  Scheduler={SCHEDULER}  Warmup ratio={WARMUP_RATIO}")
+    print(f"  Max grad norm={MAX_GRAD_NORM}")
     print(f"  G_psi blocks={GPSI_N_BLOCKS}")
     print(f"  T={T_DIFFUSION}  Schedule={NOISE_SCHEDULE}")
     print(f"{'-'*60}\n")
@@ -394,7 +407,14 @@ def main():
         eta_tracker.start_epoch()
 
         train_loss = train_epoch(
-            p0_model, denoiser, noise_schedule, train_loader, optimizer, device, scheduler,
+            p0_model,
+            denoiser,
+            noise_schedule,
+            train_loader,
+            optimizer,
+            device,
+            scheduler,
+            MAX_GRAD_NORM,
         )
 
         epoch_elapsed, eta_seconds, eta_str = eta_tracker.end_epoch()
