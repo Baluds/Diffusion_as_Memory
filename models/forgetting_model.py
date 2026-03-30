@@ -98,6 +98,26 @@ class ForgettingModel(nn.Module):
         v0 = self.v_head(outputs)   # [B, 8, 512]
 
         return u, v0
+
+
+    @torch.no_grad()
+    def encode_xt_latents(self, batch_input_ids, batch_attention_mask):
+        """
+        Adding this as a seperate function to not break other implementations.
+        Ideally this should be used for all encoding, as it is more flexible and can be used for both x and xt.
+        """
+        device = self.device
+
+        input_ids = batch_input_ids.to(device)
+        attention_mask = batch_attention_mask.to(device)
+
+        H = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
+        outputs = self.slot_pooling(H, attention_mask)
+
+        u = self.u_head(outputs)    # [B, 128]
+        v0 = self.v_head(outputs)   # [B, 8, 512]
+
+        return u, v0
     
     @torch.no_grad()
     def decode_latents(self, v0, attention_mask, max_new_tokens=64, num_beams=4):

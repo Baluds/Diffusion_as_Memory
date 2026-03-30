@@ -6,6 +6,8 @@
 #SBATCH --job-name=p0-train
 #SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=80GB
+#SBATCH --output=sbatch_scripts/slurm_output/p0-train-%j.out
+#SBATCH --error=sbatch_scripts/slurm_output/p0-train-%j.err
 
 module load conda/latest
 conda activate /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/.conda/envs/diffusion

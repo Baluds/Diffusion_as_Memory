@@ -105,7 +105,7 @@ def select_xt_labels(batch, t, device, xt_bucket_size):
     return labels, xt_index
 
 
-def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
+def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir, label_source="xt"):
     """Decode and save predictions for all validation batches."""
     os.makedirs(output_dir, exist_ok=True)
     results = []
@@ -117,18 +117,26 @@ def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
         original = tokenizer.batch_decode(
             batch["x_input_ids"], skip_special_tokens=True
         )
-        # Decode the xt target that was used as the noisy label
-        xt_all = batch["xt_input_ids"]  # [batch_size, max_xt_items, seq_len]
-        batch_size = xt_all.shape[0]
-        xt_target_ids = xt_all[torch.arange(batch_size), xt_idx.cpu()]
-        xt_target = tokenizer.batch_decode(xt_target_ids, skip_special_tokens=True)
+        if label_source == "x":
+            # Ablation mode: decoder target is x for all t.
+            xt_target = tokenizer.batch_decode(
+                batch["x_input_ids"], skip_special_tokens=True
+            )
+            xt_index_vals = torch.full((len(xt_target),), -1, dtype=torch.long)
+        else:
+            # Decode the xt target that was used as the noisy label.
+            xt_all = batch["xt_input_ids"]  # [batch_size, max_xt_items, seq_len]
+            batch_size = xt_all.shape[0]
+            xt_target_ids = xt_all[torch.arange(batch_size), xt_idx.cpu()]
+            xt_target = tokenizer.batch_decode(xt_target_ids, skip_special_tokens=True)
+            xt_index_vals = xt_idx.cpu()
 
         for i in range(len(original)):
             results.append(
                 {
                     "original": original[i],
                     "xt_target": xt_target[i],
-                    "xt_index": xt_idx[i].item(),
+                    "xt_index": xt_index_vals[i].item(),
                     "recon_noisy": pred_noisy[i],
                     "t": t_vals[i].item(),
                 }
@@ -137,7 +145,35 @@ def log_sample_outputs(sample_outputs, tokenizer, epoch, output_dir):
     out_path = os.path.join(output_dir, f"epoch_{epoch + 1}_samples.json")
     with open(out_path, "w") as f:
         json.dump(results, f, indent=4)
-        
+
+
+def convert_tokens_to_text_and_log(sample_outputs, tokenizer, epoch, output_dir):
+    """Utility to decode token IDs to text."""
+    results = []
+
+    for batch, logits in sample_outputs:
+        pred_texts = tokenizer.batch_decode(
+            torch.argmax(logits, dim=-1), skip_special_tokens=True
+        )
+        x0_text = batch["x0_text"]
+        xt_text = batch["xt_text"]
+        xprev_text = batch["xprev_text"]
+        t = batch["t"]
+        for i in range(len(pred_texts)):
+            results.append(
+                {
+                    "x0": x0_text[i],
+                    "xt": xt_text[i],
+                    "xprev": xprev_text[i],
+                    "pred_"
+                    "recon": pred_texts[i],
+                    "t": t[i].item(),
+                }
+            )
+    
+    out_path = os.path.join(output_dir, f"epoch_{epoch + 1}_samples.json")
+    with open(out_path, "w") as f:
+        json.dump(results, f, indent=4)
         
 def save_checkpoint(g_psi, decoder, optimizer, epoch, train_loss, val_loss, path):
     """Save Phase 3 checkpoint (G_psi + fine-tuned decoder)."""
@@ -181,3 +217,17 @@ def save_decoder_gpsi_checkpoint(g_psi, decoder, optimizer, epoch, train_loss, v
         },
         path,
     )    
+
+
+def save_model_checkpoint(diffusion_model, optimizer, epoch, train_loss, val_loss, path):
+    """Save Diffusion Model"""
+    torch.save(
+        {
+            "epoch": epoch,
+            "model_state_dict": diffusion_model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+        },
+        path,
+    )
