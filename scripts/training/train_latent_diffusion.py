@@ -11,9 +11,9 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from dataloader.dataloader_diffusion import MSRDiffusionDataset
+from dataloader.dataloader_latent_diffusion import LatentDiffusionDataset
 from utils.training_utils import build_p0_model, convert_tokens_to_text_and_log, save_decoder_gpsi_checkpoint, save_model_checkpoint
-from models.reverse_diffusion.diffusion_model import DiffusionModel
+from models.latent_diffusion.latent_diffusion_model import LatentDiffusionModel
 
 # CONSTANTS
 BATCH_SIZE = 10
@@ -216,9 +216,9 @@ def main():
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     tokenizer = T5Tokenizer.from_pretrained("t5-small")
-    train_dataset = MSRDiffusionDataset(args.train_dataset, tokenizer)
+    train_dataset = LatentDiffusionDataset(args.train_dataset, tokenizer)
     train_loader = DataLoader(train_dataset, batch_size=20, shuffle = True)
-    val_dataset = MSRDiffusionDataset(args.val_dataset, tokenizer)
+    val_dataset = LatentDiffusionDataset(args.val_dataset, tokenizer)
     val_loader = DataLoader(val_dataset, batch_size=20, shuffle = True)
 
     p0_model = build_p0_model(device, L_SLOTS, U_DIM)
@@ -227,7 +227,7 @@ def main():
     print(f"  Loaded from {args.p0_checkpoint} (epoch {checkpoint.get('epoch', '?')})")
     p0_trainable_params = set_trainable_params(p0_model)
 
-    diffusion_model = DiffusionModel(D_MODEL, L_SLOTS, U_DIM, D_MODEL).to(device)
+    diffusion_model = LatentDiffusionModel(D_MODEL, L_SLOTS, U_DIM, D_MODEL).to(device)
 
     train(
         p0_model,
