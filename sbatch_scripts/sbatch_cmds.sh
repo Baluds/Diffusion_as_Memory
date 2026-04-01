@@ -16,3 +16,8 @@
 #SBATCH --job-name=denoiser-train
 #SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=80GB
+
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+#SBATCH --constraint="l40s|a100"
+#SBATCH --nodes=1

@@ -6,8 +6,8 @@
 #SBATCH --job-name=p2-train
 #SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=100GB
-#SBATCH --output=sbatch_scripts/slurm_output/p2-train-%j.out
-#SBATCH --error=sbatch_scripts/slurm_output/p2-train-%j.err
+#SBATCH --output=sbatch_scripts/slurm_output/p2/p2-train-%j.out
+#SBATCH --error=sbatch_scripts/slurm_output/p2/p2-train-%j.err
 
 module load conda/latest
 conda activate /work/pi_dagarwal_umass_edu/project_3/bdevarangadi/.conda/envs/diffusion
