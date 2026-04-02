@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from transformers import T5Tokenizer
 from tqdm import tqdm
 import json
+import wandb
 
 from utils.inference_utils import load_denoiser_from_checkpoint, load_p0_model_with_gpsi_decoder_from_checkpoint
 from models.denoiser_module.denoiser import NoiseSchedule, forward_diffusion, one_step_estimate
@@ -35,31 +36,43 @@ def run_inference(p0_model, denoiser_model, noise_schedule, dataloader, tokenize
         v0 = v0.detach()
         B = v0.shape[0]
         
-        # for t_value in EVAL_TIMESTEPS:
-        t_noise_value = 500
-        t_value = 50
-        t_noise = torch.full((B,), t_noise_value, device=device, dtype=torch.long)
-        t = torch.full((B,), t_value, device=device, dtype=torch.long)
-        vt, eps = forward_diffusion(v0, t_noise, noise_schedule)
-        eps_hat = denoiser_model(vt, t, u)
-        v0_hat = one_step_estimate(vt, eps_hat, t, noise_schedule)
+        # get decoding of v0 projection
+        loss, v0_logits, _, _ = p0_model(batch)
+        pred_ids_v0 = torch.argmax(v0_logits, dim=-1).detach().cpu()
+        decoded_v0 = tokenizer.batch_decode(pred_ids_v0, skip_special_tokens=True)
         
-        v0_hat_projected = p0_model.g_psi(v_hat_0=v0_hat, t=t)
-        generate_ids = p0_model.decode_latents(v0_hat_projected, attention_mask=torch.ones((B, L_SLOTS), device=device))
-        decoded_texts = tokenizer.batch_decode(generate_ids, skip_special_tokens=True)
-        original_texts = batch["x_text"]
+        
+        # add maximum noise to the original v0
+        # t_max_value = 500
+        
+        pred_xt = [[] for _ in range(B)]
+        for t_value in [1, 50, 100, 250, 500, 750, 1000]:
+            t = torch.full((B,), t_value, device=device, dtype=torch.long)
+            vt, eps = forward_diffusion(v0, t, noise_schedule)
+            
+            # get the noise added to v_0 
+            eps_hat = denoiser_model(vt, t, u)
+            v0_hat = one_step_estimate(vt, eps_hat, t, noise_schedule)
+
+            # project clean latent on g_psi
+            v0_hat_projected = p0_model.g_psi(v_hat_0=v0_hat, v_t=vt, t=t, u=u) #vt, u
+            generate_ids = p0_model.decode_latents(v0_hat_projected, attention_mask=torch.ones((B, L_SLOTS), device=device))
+            decoded_texts = tokenizer.batch_decode(generate_ids, skip_special_tokens=True)
+            original_texts = batch["x_text"]
+            for sample_idx in range(B):
+                pred_xt[sample_idx].append((t_value, decoded_texts[sample_idx]))
         
         for sample_idx in range(B):
             results.append({
                 "batch_idx": batch_idx,
                 "sample_idx": sample_idx,
                 "timestep": t_value,
-                "noised_v0_timestep": t_noise_value,
                 "original_text": original_texts[sample_idx],
-                "decoded_text": decoded_texts[sample_idx],
+                "decoded_x": decoded_v0[sample_idx],
+                "decoded_xt": pred_xt[sample_idx],
             })
             
-    output_path = f"/project/pi_dagarwal_umass_edu/project_3/issinha/output/inference_results_p2_t_{t_value}_noise_{t_noise_value}.json"
+    output_path = f"/project/pi_dagarwal_umass_edu/project_3/issinha/output/inference_results_denoiser_decoder_final.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
 
@@ -85,7 +98,21 @@ def main():
     parser.add_argument("--decoder-gpsi-checkpoint", type=str, required=False)
     parser.add_argument("--denoiser-checkpoint", type=str, required=False)
     parser.add_argument("--dataset", type=str, required=False)
+    parser.add_argument("--wandb-run-name", type=str, required=False)
+    parser.add_argument("--wandb-project-name", type=str, default="diffusion-as-memory")
     args = parser.parse_args()
+    
+    # wandb_project_name = args.wandb_project_name
+    # if args.wandb_run_name:
+    #     print("  Initializing Weights & Biases...")
+    #     wandb.init(
+    #         project=wandb_project_name,
+    #         name=args.wandb_run_name,
+    #         config={
+    #             "phase": "inference",
+    #             "model": "one-step-estimate-seperate"
+    #         },
+    #     )
     
     tokenizer = T5Tokenizer.from_pretrained("t5-small")
     dataset_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/Diffusion_as_Memory/data/final/test.json"
@@ -94,8 +121,8 @@ def main():
     print(f"Loaded {len(dataset)} samples, {len(dataloader)} batches")
     
     p0_model_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/checkpoints/p0/mod_g_psi/best_model.pt"
-    denoiser_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/checkpoints/p1/mod_g_psi/best_model.pt"
-    gpsi_decoder_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/checkpoints/p2/mod_g_psi_no_cln/best_model.pt"
+    denoiser_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/checkpoints/denoiser_decoder/best_denoiser_model.pt"
+    gpsi_decoder_path = "/project/pi_dagarwal_umass_edu/project_3/issinha/checkpoints/denoiser_decoder/best_decoder_gpsi_model.pt"
     device = "cuda" if torch.cuda.is_available() else "cpu"
     p0_model, _ = load_p0_model_with_gpsi_decoder_from_checkpoint(p0_model_path, gpsi_decoder_path, device, L_SLOTS, U_DIM)
     print(f"Loaded P0 model from {p0_model_path}")
