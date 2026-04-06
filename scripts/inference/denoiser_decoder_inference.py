@@ -29,7 +29,7 @@ def run_inference(p0_model, denoiser_model, noise_schedule, dataloader, tokenize
     """
     
     results = []
-    for batch_idx, batch in enumerate(tqdm(dataloader, desc="Running inference"), start=1):
+    for batch_idx, batch in enumerate(tqdm(dataloader, desc="Running multistep inference"), start=1):
         u, v0 = p0_model.encode_latents(batch)
         u = u.detach()
         v0 = v0.detach()

@@ -267,8 +267,8 @@ def main():
     print("Parsing arguments...")
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    checkpoint_dir = "/project/pi_dagarwal_umass_edu/project_3/issinha/checkpoints/exp1"
-    output_dir = "/project/pi_dagarwal_umass_edu/project_3/issinha/output/exp1"
+    checkpoint_dir = "../checkpoints/p1/train_5thapr_prak"
+    output_dir = "../output/p1/train_5thapr_prak"
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(checkpoint_dir, exist_ok=True)
     

@@ -8,7 +8,7 @@ from tqdm import tqdm
 import json
 
 from utils.inference_utils import load_denoiser_from_checkpoint, load_p0_model_with_gpsi_decoder_from_checkpoint
-from models.denoiser_module.denoiser import NoiseSchedule, forward_diffusion
+from models.denoiser_module.denoiser import NoiseSchedule, forward_diffusion, one_step_estimate
 from models.denoiser_module.denoiser_multistep import step_by_step_estimate
 from dataloader.dataloader_augmentated import MSRAugmentedDataset
 
@@ -45,11 +45,19 @@ def run_inference(p0_model, denoiser_model, noise_schedule, dataloader, tokenize
         curr_v = vt
         for t_val in reversed(range(1, t_value + 1)):
             t_batch = torch.full((B,), t_val, device=device, dtype=torch.long)
-            eps_hat = denoiser_model(curr_v, t, u)
-            curr_v = step_by_step_estimate(curr_v, eps_hat, t, noise_schedule)
+            eps_hat = denoiser_model(curr_v, t_batch, u)
+            curr_v = step_by_step_estimate(curr_v, eps_hat, t_batch, noise_schedule)
 
             if t_val in [500, 450, 400, 350, 300, 250, 200, 150, 100, 50, 1]:
-                v0_hat_projected = p0_model.g_psi(v_hat_0=curr_v, t=t_batch)
+                v0_hat_current_guess = one_step_estimate(curr_v, eps_hat, t_batch, noise_schedule)
+                
+                v0_hat_projected = p0_model.g_psi(
+                    v_hat_0=v0_hat_current_guess, 
+                    v_t=curr_v, 
+                    t=t_batch, 
+                    u=u
+                )
+                
                 ids = p0_model.decode_latents(v0_hat_projected, torch.ones((B, L_SLOTS), device=device))
                 decoded = tokenizer.batch_decode(ids, skip_special_tokens=True)
                 
