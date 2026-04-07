@@ -40,7 +40,7 @@ from models.g_psi_module.semantic_projection import SemanticProjectionModule
 from models.denoiser_module.config import DenoiserConfig
 from models.denoiser_module.denoiser import Denoiser, NoiseSchedule, forward_diffusion, one_step_estimate
 from models.g_psi_module.g_psi_config import G_psi_config
-from evaluation.run_uni_eval import evaluate_factual_consistency_return
+from evaluation.run_uni_eval_factual_consistency import evaluate_factual_consistency_return
 from train_phase2_config import (
     BATCH_SIZE,
     EPOCHS,
