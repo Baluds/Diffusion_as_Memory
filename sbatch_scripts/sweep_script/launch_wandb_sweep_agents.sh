@@ -4,7 +4,7 @@ set -euo pipefail
 # Submit multiple SLURM jobs, each running a W&B agent.
 #
 # Example:
-#   bash sbatch_scripts/launch_wandb_sweep_agents.sh \
+#   bash sbatch_scripts/sweep_script/launch_wandb_sweep_agents.sh \
 #     --sweep-id qbfan4dk \
 #     --project diffusion-as-memory \
 #     --num-agents 4 \
@@ -72,7 +72,7 @@ for i in $(seq 1 "${NUM_AGENTS}"); do
   sbatch \
     --job-name "${job_name}" \
     --export=ALL,SWEEP_ID="${SWEEP_ID}",WANDB_ENTITY="${WANDB_ENTITY}",WANDB_PROJECT="${WANDB_PROJECT}",WANDB_AGENT_COUNT="${AGENT_COUNT_PER_JOB}" \
-    sbatch_scripts/sweep_script/sbatch_wandb_agent_p2.sh
+    sbatch_scripts/sweep_script/sbatch_wandb_agent.sh
   echo "  submitted ${job_name}"
 done
 
