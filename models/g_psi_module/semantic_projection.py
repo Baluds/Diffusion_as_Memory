@@ -67,7 +67,8 @@ class SemanticProjectionModule(nn.Module):
 
         # x = [v_t, v_hat_0] if using v_t; otherwise x = v_hat_0 only
         input_dim = self.d if self.no_use_vt else (2 * self.d)
-        self.input_proj = nn.Linear(input_dim, self.d)
+        # self.input_proj = nn.Linear(input_dim, self.d)
+        self.input_proj = nn.Linear(self.d, self.d)
 
         self.blocks = nn.ModuleList([
             SPMBlock(self.d, d_cond, self.d_ff, use_attn=self.use_attn, n_heads=self.n_heads)
