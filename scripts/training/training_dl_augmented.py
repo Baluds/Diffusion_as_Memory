@@ -186,7 +186,7 @@ def main():
     u_head = UHead(hidden_dim = encoder.hidden_dim_size, output_dim = 128)
     v_head = VHead(hidden_dim = encoder.hidden_dim_size)
     decoder_x = DecoderX()
-    g_psi = SemanticProjectionModule(config=G_psi_config,no_use_u=True,no_use_vt=True)
+    g_psi = SemanticProjectionModule(config=G_psi_config,no_use_vt=True)
     # decoder_y = DecoderY(hidden_dim = encoder.hidden_dim_size, u_dim = 128, num_slots = 8)
 
     model = ForgettingModel(

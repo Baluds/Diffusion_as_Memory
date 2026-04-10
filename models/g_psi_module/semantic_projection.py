@@ -67,7 +67,8 @@ class SemanticProjectionModule(nn.Module):
 
         # x = [v_t, v_hat_0] if using v_t; otherwise x = v_hat_0 only
         input_dim = self.d if self.no_use_vt else (2 * self.d)
-        self.input_proj = nn.Linear(input_dim, self.d)
+        # self.input_proj = nn.Linear(input_dim, self.d)
+        self.input_proj = nn.Linear(self.d, self.d)
 
         self.blocks = nn.ModuleList([
             SPMBlock(self.d, d_cond, self.d_ff, use_attn=self.use_attn, n_heads=self.n_heads)
@@ -81,8 +82,8 @@ class SemanticProjectionModule(nn.Module):
 
     def forward(
         self,
-        v_hat_0: torch.Tensor,  # [B, L, d]
         t:       torch.Tensor,  # [B]  integer timesteps
+        v_hat_0: Optional[torch.Tensor] = None,  # [B, L, d]
         v_t:     Optional[torch.Tensor] = None,  # [B, L, d] or None when no_use_vt=True
         u:       Optional[torch.Tensor] = None,  # [B, u_dim] or None when no_use_u=True
     ) -> torch.Tensor:
@@ -96,16 +97,16 @@ class SemanticProjectionModule(nn.Module):
             c = torch.cat([u, t_emb], dim=-1)
 
         if self.no_use_vt:
-            x = v_hat_0
+            x_ini = v_hat_0
         else:
             if v_t is None:
                 raise ValueError("v_t is required when no_use_vt=False")
-            x = torch.cat([v_t, v_hat_0], dim=-1)
-        x = self.input_proj(x)                       # [B, L, d]
+            x_ini = v_t
+        x = self.input_proj(x_ini)                       # [B, L, d]
 
         for block in self.blocks:
             x = block(x, c)                          # [B, L, d]
 
-        v_tilde_0 = v_hat_0 + self.out_proj(x)      # [B, L, d]
+        v_tilde_0 = x_ini + self.out_proj(x)      # [B, L, d]
 
         return v_tilde_0
