@@ -4,6 +4,8 @@ import os
 import re
 import importlib
 import importlib.util
+import nltk
+nltk.download('punkt_tab')
 
 # Prefer local clone inside this repo; fallback to shared path if needed.
 LOCAL_UNIEVAL_PATH = os.path.abspath(
@@ -146,7 +148,7 @@ def evaluate_factual_consistency(src_list, output_list):
     }
 
     # save to file
-    with open("unieval_scores.json", "w") as f:
+    with open("../output/p1/inference_5thapr_prak/unieval_factualconsis_scores.json", "w") as f:
         json.dump(log_results, f, indent=4)
 
 
@@ -182,5 +184,5 @@ def get_src_and_output(file_path, ground_label_key="x_true", prediction_key="x_p
 
 
 if __name__ == "__main__":
-    src_list, output_list = get_src_and_output("output/p0/inference/test_preds.json", ground_label_key="x_true", prediction_key="x_pred")
+    src_list, output_list = get_src_and_output("../output/p1/inference_5thapr_prak/inference_progression.json", ground_label_key="original_text", prediction_key="decoded_text")
     evaluate_factual_consistency(src_list, output_list)

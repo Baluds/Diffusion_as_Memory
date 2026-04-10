@@ -22,7 +22,7 @@ def compute_bert_score(src_list, output_list):
     }
 
     # save to file
-    with open("metrics.json", "w") as f:
+    with open("../output/p1/inference_5thapr_prak/bertscore_metrics.json", "w") as f:
         json.dump(results, f, indent=4)
 
 
@@ -41,5 +41,5 @@ def get_src_and_output(file_path, ground_label_key="x_true", prediction_key="x_p
 
 
 if __name__ == "__main__":
-    src_list, output_list = get_src_and_output("output/p0/inference/test_preds.json", ground_label_key="x_true", prediction_key="x_pred")
+    src_list, output_list = get_src_and_output("../output/p1/inference_5thapr_prak/inference_progression.json", ground_label_key="original_text", prediction_key="decoded_text")
     compute_bert_score(src_list, output_list)
