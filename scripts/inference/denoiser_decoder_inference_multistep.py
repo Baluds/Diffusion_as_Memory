@@ -13,8 +13,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
     
 from utils.inference_utils import load_denoiser_from_checkpoint, load_p0_model_with_gpsi_decoder_from_checkpoint
-from models.denoiser_module.denoiser import NoiseSchedule, forward_diffusion, one_step_estimate
-from models.denoiser_module.denoiser_multistep import step_by_step_estimate
+from models.denoiser_module.denoiser import NoiseSchedule, forward_diffusion, one_step_estimate, step_by_step_estimate
 from dataloader.dataloader_augmentated import MSRAugmentedDataset
 
 

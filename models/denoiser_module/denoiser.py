@@ -406,3 +406,33 @@ def one_step_estimate(
     v0_hat = (vt - sqrt_one_minus_alpha_bar * eps_hat) / sqrt_alpha_bar
     
     return v0_hat
+
+def step_by_step_estimate(
+    vt: torch.Tensor,
+    eps_hat: torch.Tensor,
+    t: torch.Tensor,
+    noise_schedule: NoiseSchedule
+) -> torch.Tensor:
+    
+    device = vt.device
+    batch_size = vt.shape[0]
+    
+    t_idx = t[0].item()
+    alpha_bar_t = noise_schedule.get_alpha_bar(t_idx)
+    alpha_bar_t_prev = noise_schedule.get_alpha_bar(t_idx - 1) if t_idx > 1 else 1.0
+    alpha_t = alpha_bar_t / alpha_bar_t_prev
+    beta_t = 1 - alpha_t
+
+    coeff = 1 / math.sqrt(alpha_t)
+    eps_coeff = beta_t / math.sqrt(1 - alpha_bar_t)  
+    mean = coeff * (vt - eps_coeff * eps_hat)
+    
+
+    if t_idx > 1:
+        z = torch.randn_like(vt)
+        sigma_t = math.sqrt((1-alpha_bar_t_prev)*beta_t/(1-alpha_bar_t)) 
+        v_t_prev = mean + sigma_t * z
+    else:
+        v_t_prev = mean
+        
+    return v_t_prev
