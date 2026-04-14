@@ -28,7 +28,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from utils.training_utils import build_p0_model, select_xt_labels, log_sample_outputs, save_checkpoint, ETATracker
+from utils.training_utils import build_p0_model_for_p2, select_xt_labels, log_sample_outputs, save_checkpoint, ETATracker
 from tqdm import tqdm
 from dataloader.dataloader_augmentated import MSRAugmentedDataset
 from models.encoder_prep.encoder import TextEncoder
@@ -39,7 +39,7 @@ from models.decoder_prep.decoder_x import DecoderX
 from models.forgetting_model import ForgettingModel
 from models.g_psi_module.semantic_projection import SemanticProjectionModule
 from models.denoiser_module.config import DenoiserConfig
-from models.denoiser_module.denoiser import Denoiser, NoiseSchedule, forward_diffusion, one_step_estimate
+from models.denoiser_module.denoiser import Denoiser, NoiseSchedule, forward_diffusion, step_by_step_estimate
 from models.g_psi_module.g_psi_config import G_psi_config
 from evaluation.run_uni_eval_factual_consistency import evaluate_factual_consistency_return
 from train_phase2_config import (
@@ -199,10 +199,10 @@ def train_epoch(
         vt, _ = forward_diffusion(v0, t, noise_schedule)
         with torch.no_grad():
             eps_hat = denoiser(vt, t, u)
-            v_hat_0 = one_step_estimate(vt, eps_hat, t, noise_schedule)
+            v_hat_0 = step_by_step_estimate(vt, eps_hat, t, noise_schedule)
 
         labels_noisy, _ = select_xt_labels(batch, t, device, XT_BUCKET_SIZE)   # [B, seq_len]
-        vt_tilde = p0_model.g_psi(v_hat_0=v_hat_0, t=t, v_t=vt, u=u)    # [B, L, d]
+        vt_tilde = p0_model.g_psi(t=t, v_t=v_hat_0, u=u)    # [B, L, d]
         slot_mask = torch.ones(batch_size, L_SLOTS, device=device)
         loss_recon, logits = p0_model.decoder_x(vt_tilde, slot_mask, labels_noisy)
 
@@ -244,10 +244,10 @@ def validate_epoch(p0_model, denoiser, noise_schedule, dataloader, device):
         t = torch.randint(1, T_DIFFUSION + 1, (batch_size,), device=device)
         vt, _ = forward_diffusion(v0, t, noise_schedule)
         eps_hat = denoiser(vt, t, u)
-        v_hat_0 = one_step_estimate(vt, eps_hat, t, noise_schedule)
+        v_hat_0 = step_by_step_estimate(vt, eps_hat, t, noise_schedule)
         labels_noisy, xt_index = select_xt_labels(batch, t, device, XT_BUCKET_SIZE)   # [B, seq_len]
         # Noisy reconstruction
-        vt_tilde = p0_model.g_psi(v_hat_0=v_hat_0, t=t, v_t=vt, u=u)
+        vt_tilde = p0_model.g_psi(t=t, v_t=v_hat_0, u=u)
         slot_mask = torch.ones(batch_size, L_SLOTS, device=device)
         loss_recon, logits_noisy = p0_model.decoder_x(vt_tilde, slot_mask, labels_noisy)
 
@@ -306,7 +306,7 @@ def main():
 
     # Load P0 model
     print("\nLoading P0 checkpoint...")
-    p0_model = build_p0_model(device, L_SLOTS, U_DIM)
+    p0_model = build_p0_model_for_p2(device, L_SLOTS, U_DIM)
     checkpoint = torch.load(args.p0_checkpoint, map_location=device)
     p0_model.load_state_dict(checkpoint["model_state_dict"])
     print(f"  Loaded from {args.p0_checkpoint} (epoch {checkpoint.get('epoch', '?')})")

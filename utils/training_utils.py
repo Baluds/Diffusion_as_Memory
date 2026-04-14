@@ -86,6 +86,26 @@ def build_p0_model(device, l_slots, u_dim):
     model.to(device)
     return model
 
+def build_p0_model_for_p2(device, num_slots, u_dim):
+    """Build ForgettingModel with sweepable num_slots and u_dim."""
+    encoder = TextEncoder()
+    slot_pool = SlotPooling(hidden_dim=encoder.hidden_dim_size, num_slots=num_slots)
+    u_head = UHead(hidden_dim=encoder.hidden_dim_size, output_dim=u_dim)
+    v_head = VHead(hidden_dim=encoder.hidden_dim_size)
+    decoder_x = DecoderX()
+    g_psi = SemanticProjectionModule(config=G_psi_config)
+
+    model = ForgettingModel(
+        encoder=encoder,
+        slot_pooling=slot_pool,
+        u_head=u_head,
+        v_head=v_head,
+        decoder_x=decoder_x,
+        g_psi=g_psi,
+    )
+    model.to(device)
+    return model
+
 
 def select_xt_labels(batch, t, device, xt_bucket_size):
     """Pick the right degraded xt label for each sample based on timestep.

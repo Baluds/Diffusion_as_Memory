@@ -413,26 +413,45 @@ def step_by_step_estimate(
     t: torch.Tensor,
     noise_schedule: NoiseSchedule
 ) -> torch.Tensor:
-    
+    """
+    Sample v_{t-1} from the reverse diffusion posterior.
+
+    Supports per-sample timesteps in the batch. If all samples share the same
+    timestep, this matches the scalar version.
+    """
+
     device = vt.device
-    batch_size = vt.shape[0]
+    dtype = vt.dtype
+
+    t = t.to(device=device, dtype=torch.long)
+
+    # Move alpha_bar to the same device as t before indexing
+    alpha_bar_device = noise_schedule.alpha_bar.to(device=device, dtype=dtype)
     
-    t_idx = t[0].item()
-    alpha_bar_t = noise_schedule.get_alpha_bar(t_idx)
-    alpha_bar_t_prev = noise_schedule.get_alpha_bar(t_idx - 1) if t_idx > 1 else 1.0
+    alpha_bar_t = alpha_bar_device[t - 1]
+    alpha_bar_t_prev = torch.where(
+        t > 1,
+        alpha_bar_device[t - 2],
+        torch.ones_like(alpha_bar_t),
+    )
+
     alpha_t = alpha_bar_t / alpha_bar_t_prev
     beta_t = 1 - alpha_t
 
-    coeff = 1 / math.sqrt(alpha_t)
-    eps_coeff = beta_t / math.sqrt(1 - alpha_bar_t)  
-    mean = coeff * (vt - eps_coeff * eps_hat)
-    
+    alpha_bar_t = alpha_bar_t.view(-1, 1, 1)
+    alpha_bar_t_prev = alpha_bar_t_prev.view(-1, 1, 1)
+    alpha_t = alpha_t.view(-1, 1, 1)
+    beta_t = beta_t.view(-1, 1, 1)
 
-    if t_idx > 1:
-        z = torch.randn_like(vt)
-        sigma_t = math.sqrt((1-alpha_bar_t_prev)*beta_t/(1-alpha_bar_t)) 
-        v_t_prev = mean + sigma_t * z
-    else:
-        v_t_prev = mean
-        
-    return v_t_prev
+    coeff = 1 / torch.sqrt(alpha_t)
+    eps_coeff = beta_t / torch.sqrt(1 - alpha_bar_t)
+    mean = coeff * (vt - eps_coeff * eps_hat)
+
+    z = torch.randn_like(vt)
+    sigma_t = torch.sqrt((1 - alpha_bar_t_prev) * beta_t / (1 - alpha_bar_t))
+
+    return torch.where(
+        (t > 1).view(-1, 1, 1),
+        mean + sigma_t * z,
+        mean,
+    ) #vt_prev is returned
