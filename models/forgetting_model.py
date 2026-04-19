@@ -67,7 +67,7 @@ class ForgettingModel(nn.Module):
 
         if use_u_for_v0:
             t_zero = torch.zeros(B, dtype=torch.long, device=device)
-            v0 = self.g_psi(v_hat_0=v0, t=t_zero)
+            v0 = self.g_psi(v_hat_0=v0, t=t_zero, u=u)  # [B, L, d]
 
         loss_x, logits_x = self.decoder_x(v0, slot_mask, labels_x)
         # loss_y, logits_y = self.decoder_y(u, labels_y)

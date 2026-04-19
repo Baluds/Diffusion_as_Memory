@@ -11,9 +11,9 @@ metric:
 
 parameters:
   num_slots:
-    values: [6, 8, 10]
+    values: [8, 12, 16, 20]
   u_dim:
-    values: [64, 128, 256]
+    values: [128, 256, 512]
   learning_rate:
     distribution: log_uniform_values
     min: 1e-5

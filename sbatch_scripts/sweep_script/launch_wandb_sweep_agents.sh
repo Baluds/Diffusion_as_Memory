@@ -8,7 +8,7 @@ set -euo pipefail
 #     --sweep-id qbfan4dk \
 #     --project diffusion-as-memory \
 #     --num-agents 4 \
-#     --agent-count-per-job 2 \
+#     --agent-count-per-job 12 \
 #     --entity balachandradevarangadi-umass-amherst
 
 
