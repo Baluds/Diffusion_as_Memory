@@ -184,3 +184,8 @@ def get_src_and_output(file_path, ground_label_key="x_true", prediction_key="x_p
 if __name__ == "__main__":
     src_list, output_list = get_src_and_output("output/p0/inference/test_preds.json", ground_label_key="x_true", prediction_key="x_pred")
     evaluate_factual_consistency(src_list, output_list)
+
+
+# if __name__ == "__main__":
+#     src_list, output_list = get_src_and_output("../output/p1/inference_5thapr_prak/inference_progression.json", ground_label_key="original_text", prediction_key="decoded_text")
+#     evaluate_factual_consistency(src_list, output_list)

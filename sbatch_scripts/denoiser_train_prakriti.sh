@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --partition=gpu-preempt
+#SBATCH --partition=superpod-a100
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --time=20:00:00
 #SBATCH --job-name=denoiser-train
 #SBATCH --cpus-per-task=4
-#SBATCH --mem-per-cpu=120GB
+#SBATCH --mem-per-cpu=90GB
 #SBATCH --output=slurm_output/denoiser-train-%j.out
 #SBATCH --error=slurm_output/denoiser-train-%j.err
 
@@ -31,7 +31,7 @@ echo ""
 python ../scripts/training/train_denoiser_decoder.py \
     --p0-checkpoint ../checkpoints/p0/train_29Mar_prak/best_model.pt \
     --train-dataset ../data/final/train.json \
-    --val-dataset ../data/final/test.json \
+    --val-dataset ../data/final/validate.json \
     --wandb-project diffusion-as-memory \
     --wandb-run-name p12-training-run_$(date +%Y%m%d_%H%M%S)
 

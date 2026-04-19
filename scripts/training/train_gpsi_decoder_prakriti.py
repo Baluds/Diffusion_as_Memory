@@ -10,11 +10,12 @@ import wandb
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
-
+import random
 from models.denoiser_module.config import DenoiserConfig
 from utils.training_utils import build_p0_model, select_xt_labels, log_sample_outputs, save_denoiser_checkpoint, save_decoder_gpsi_checkpoint, ETATracker
 from dataloader.dataloader_augmentated import MSRAugmentedDataset
 from models.denoiser_module.denoiser import forward_diffusion, one_step_estimate, Denoiser, NoiseSchedule
+from models.denoiser_module.denoiser_multistep import step_by_step_estimate
 
 # Training Hyperparameters
 BATCH_SIZE = 10
@@ -75,30 +76,40 @@ def train_one_epoch(p0_model, denoiser, noise_scheduler, train_loader, optimizer
         u = u.detach()
         v0 = v0.detach()
         
-        # run diffusion process and compute denoiser loss
-        t = torch.randint(1, denoiser.T + 1, (batch_size,), device=device)
-        vt, eps = forward_diffusion(v0, t, noise_scheduler)
-        eps_pred = denoiser(vt, t, u)
-        loss_denoiser = criterion(eps_pred, eps)
+        # for t 
+        t_value = random.randint(50, 1000)
+        t = torch.full((batch_size,), t_value, device=device, dtype=torch.long)
+            
         
-        # get the denoised v0 estimate
-        v0_denoised = one_step_estimate(vt, eps_pred, t, noise_scheduler)
+        # run diffusion process and compute denoiser loss
+        # t = torch.randint(1, denoiser.T + 1, (batch_size,), device=device)
+        with torch.no_grad():
+            vt, eps = forward_diffusion(v0, t, noise_scheduler)
+        
+        for t_val in reversed(range(1, t_value + 1)):
+            t_batch = torch.full((batch_size,), t_val, device=device, dtype=torch.long)
+            with torch.no_grad():
+                eps_pred = denoiser(vt, t, u)
+            vt = step_by_step_estimate(vt, eps_pred, t_batch, noise_scheduler)
+        
+        # loss_denoiser = criterion(eps_pred, eps)
+        
+        # # get the denoised v0 estimate
+        # v0_denoised = one_step_estimate(vt, eps_pred, t, noise_scheduler)
+
+        t_final = torch.ones((batch_size,), device=device, dtype=torch.long)
         
         # run decoder and g_psi, compute their loss
-        v0_denoised_projected = p0_model.g_psi(v_hat_0=v0_denoised, t=t, v_t=vt, u=u) 
-        # don't pass v_hat_0
-        
+        v0_denoised_projected = p0_model.g_psi( t=t_final, v_t=vt, u=u) # don't pass v_hat_0
         # why need slot mask!!
         slot_mask = torch.ones(batch_size, denoiser.L, device=device)
         labels, _ = select_xt_labels(batch, t, device, XT_BUCKET_SIZE)
         loss_recon, logits = p0_model.decoder_x(v0_denoised_projected, slot_mask, labels)
-
-        #level-wise loss weighting
         
-        print("loss denoiser", loss_denoiser)
-        print("loss recon", loss_recon)
+        # print("loss denoiser", loss_denoiser)
+        # print("loss recon", loss_recon)
         # maybe include some lambda
-        loss = loss_denoiser + loss_recon
+        loss = loss_recon
         loss.backward()
         nn.utils.clip_grad_norm_(
             list(p0_model.g_psi. parameters()) + list(p0_model.decoder_x.parameters()),
