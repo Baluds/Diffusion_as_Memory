@@ -176,9 +176,9 @@ def main():
     # val_loader = DataLoader(val_dataset, batch_size=10, shuffle = True)
 
     tokenizer = T5Tokenizer.from_pretrained("t5-small")
-    train_dataset = MSRAugmentedDataset("../data/final/train.json", tokenizer)
+    train_dataset = MSRAugmentedDataset("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/final/train.json", tokenizer)
     train_loader = DataLoader(train_dataset, batch_size=10, shuffle = True)
-    val_dataset = MSRAugmentedDataset("../data/final/validate.json", tokenizer)
+    val_dataset = MSRAugmentedDataset("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/final/validate.json", tokenizer)
     val_loader = DataLoader(val_dataset, batch_size=10, shuffle = True)
 
     encoder = TextEncoder()

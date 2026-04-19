@@ -1,8 +1,9 @@
 #!/bin/bash
 #SBATCH --partition=superpod-a100
 #SBATCH --gres=gpu:1
+#SBATCH --constraint="a16|gh200|h100|a100|l40s|a40|rtx8000"
 #SBATCH --nodes=1
-#SBATCH --time=20:00:00
+#SBATCH --time=10:00:00
 #SBATCH --job-name=p0-train
 #SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=90GB
