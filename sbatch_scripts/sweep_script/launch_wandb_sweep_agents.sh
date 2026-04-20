@@ -17,7 +17,7 @@ WANDB_ENTITY=""
 WANDB_PROJECT=""
 NUM_AGENTS=1
 AGENT_COUNT_PER_JOB=1
-JOB_PREFIX="p2-sweep"
+JOB_PREFIX="p0-sweep"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

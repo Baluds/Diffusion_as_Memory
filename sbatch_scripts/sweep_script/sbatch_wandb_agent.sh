@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
-#SBATCH --constraint="gh200|h100|a100|l40s|a40|rtx8000|a16"
+#SBATCH --constraint="gh200|h100|a100|l40s|a40|rtx8000"
 #SBATCH --nodes=1
-#SBATCH --time=40:00:00
-#SBATCH --job-name=p2-sweep-agent
-#SBATCH --cpus-per-task=4
+#SBATCH --time=20:00:00
+#SBATCH --job-name=p0-sweep-agent
+#SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=100GB
-#SBATCH --output=sbatch_scripts/slurm_output/p2-sweep-agent-%j.out
-#SBATCH --error=sbatch_scripts/slurm_output/p2-sweep-agent-%j.err
+#SBATCH --output=sbatch_scripts/slurm_output/p0-sweep-agent-%j.out
+#SBATCH --error=sbatch_scripts/slurm_output/p0-sweep-agent-%j.err
 
 set -euo pipefail
 
