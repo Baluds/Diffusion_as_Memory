@@ -29,6 +29,6 @@ NOISE_SCHEDULE = "cosine"
 XT_BUCKET_SIZE = T_DIFFUSION // 10
 
 # Latent Dimensions (must match P0/P1)
-L_SLOTS = 8
+L_SLOTS = 16
 D_MODEL = 512
-U_DIM = 128
+U_DIM = 512
