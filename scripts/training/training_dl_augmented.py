@@ -177,13 +177,13 @@ def main():
 
     tokenizer = T5Tokenizer.from_pretrained("t5-small")
     train_dataset = MSRAugmentedDataset("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/final/train.json", tokenizer)
-    train_loader = DataLoader(train_dataset, batch_size=10, shuffle = True)
+    train_loader = DataLoader(train_dataset, batch_size=8, shuffle = True)
     val_dataset = MSRAugmentedDataset("/work/pi_dagarwal_umass_edu/project_3/bdevarangadi/Diffusion_as_Memory/data/final/validate.json", tokenizer)
-    val_loader = DataLoader(val_dataset, batch_size=10, shuffle = True)
+    val_loader = DataLoader(val_dataset, batch_size=8, shuffle = True)
 
     encoder = TextEncoder()
-    slot_pool = SlotPooling(hidden_dim = encoder.hidden_dim_size, num_slots = 8)
-    u_head = UHead(hidden_dim = encoder.hidden_dim_size, output_dim = 128)
+    slot_pool = SlotPooling(hidden_dim = encoder.hidden_dim_size, num_slots = 16)
+    u_head = UHead(hidden_dim = encoder.hidden_dim_size, output_dim = 512)
     v_head = VHead(hidden_dim = encoder.hidden_dim_size)
     decoder_x = DecoderX()
     g_psi = SemanticProjectionModule(config=G_psi_config,no_use_vt=True)
@@ -199,8 +199,8 @@ def main():
     )
     model.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr = 1e-4)
-    epochs = 500
+    optimizer = torch.optim.Adam(model.parameters(), lr = 1.3733936344532177e-4)
+    epochs = 300
 
     # Validate every n epochs
     val_interval = 10
@@ -220,8 +220,8 @@ def main():
             name=args.wandb_run_name,
             config={
                 "epochs": epochs,
-                "batch_size": 10,
-                "learning_rate": 1e-4,
+                "batch_size": 8,
+                "learning_rate": 1.3733936344532177e-4,
                 "val_interval": val_interval,
                 "output_dir": output_dir,
                 "checkpoint_dir": checkpoint_dir,
